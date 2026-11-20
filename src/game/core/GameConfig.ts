@@ -23,9 +23,10 @@ export const RENDER = {
   maxHeight: 720,
   fov: 60,
   near: 0.1,
-  far: 220,
-  fogNear: 90,
-  fogFar: 220,
+  /** 300 是给天空穹顶与远山留的余量，几何量不变，纯深度范围 */
+  far: 300,
+  fogNear: 170,
+  fogFar: 420,
 } as const
 
 /** 赛道尺寸（单位：米） */
@@ -79,14 +80,51 @@ export const CAMERA = {
   offsetYMin: 0.6,
 } as const
 
-/** 配色（低多边形糖果风） */
+/** 配色（糖果风，参考 Fall Guys 的低多边形饱和度） */
 export const COLORS = {
-  sky: 0x8fd2ff,
-  track: 0x35d6c8,
-  start: 0xf6d6e4,
-  finish: 0xc9c2f2,
-  rail: 0x8b5cf6,
-  obstacle: 0xff7fb2,
-  mountain: 0x6d7bd6,
+  /** 天空渐变的上下两端 */
+  skyTop: 0x1fb4ff,
+  skyBottom: 0xc8f4ff,
+  sky: 0x7ad4ff,
+  /** 雾色取近地平线的浅色，避免远景出现色带断层 */
+  fog: 0xc4efff,
+
+  /** 地面棋盘格的两色 */
+  checkerCyan: 0x2fe6dd,
+  checkerPink: 0xff7fc8,
+
+  /** 起步 / 终点平台底色 */
+  start: 0xff9ad8,
+  finish: 0x9d8bff,
+
+  /** 护栏与装饰 */
+  rail: 0xff6ed1,
+  railDark: 0x9b46d6,
+
+  /** 障碍：条纹栏架 / 旋转扫地杆 / 滚轴 */
+  hurdle: 0xff5fa8,
+  hurdleStripe: 0xffd9ef,
+  sweeper: 0xff8dd6,
+  pin: 0xff6cc0,
+
+  /** 终点皇冠 */
+  crown: 0xfff07a,
+
+  /** 远山的两档紫 */
+  mountainLight: 0xbfc9ff,
+  mountainDeep: 0x8e9bf5,
+
+  /** 远景底座与云 */
+  ground: 0x8fd8ff,
+  cloud: 0xffffff,
+
+  /** M1 测试方块 */
   test: 0xff5c94,
 } as const
+
+/** 起点人群的果冻小人配色 */
+export const CROWD_COLORS = [
+  0xff3f8b, 0x22d0c8, 0x7a5cff, 0x35e07a, 0xff8a3d, 0x3fb6ff, 0xffd23f, 0xd24bff,
+  0x36e0b0, 0xff5f5f, 0x5b6bff, 0x9ee83c,
+] as const
+

@@ -1,0 +1,128 @@
+{
+  "url": "http://localhost:5173/",
+  "collectedAt": "2026-11-20 22:24:05",
+  "webgl": {
+    "webgl": true,
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce GT 610 (0x0000104A) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+  },
+  "perf": {
+    "fps": 60.00360021601296,
+    "avgMs": 16.665666666666667,
+    "p99Ms": 16.800000000000182,
+    "maxMs": 16.899999999999636,
+    "drawCalls": 21,
+    "triangles": 14020,
+    "samples": 300
+  },
+  "samples": [
+    {
+      "fps": 45.02660663119117,
+      "avgMs": 22.209090909090904,
+      "p99Ms": 100,
+      "maxMs": 100,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 22
+    },
+    {
+      "fps": 52.60495700556399,
+      "avgMs": 19.009615384615383,
+      "p99Ms": 100,
+      "maxMs": 100,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 52
+    },
+    {
+      "fps": 55.145837485881344,
+      "avgMs": 18.133734939759034,
+      "p99Ms": 100,
+      "maxMs": 100,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 83
+    },
+    {
+      "fps": 56.353480949531225,
+      "avgMs": 17.74513274336283,
+      "p99Ms": 66.69999999999993,
+      "maxMs": 100,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 113
+    },
+    {
+      "fps": 57.08582834331337,
+      "avgMs": 17.517482517482517,
+      "p99Ms": 66.69999999999993,
+      "maxMs": 100,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 143
+    },
+    {
+      "fps": 57.57071547420965,
+      "avgMs": 17.36994219653179,
+      "p99Ms": 66.69999999999993,
+      "maxMs": 100,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 173
+    },
+    {
+      "fps": 57.91726105563481,
+      "avgMs": 17.266009852216747,
+      "p99Ms": 16.90000000000009,
+      "maxMs": 100,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 203
+    },
+    {
+      "fps": 58.177278401997505,
+      "avgMs": 17.188841201716738,
+      "p99Ms": 16.90000000000009,
+      "maxMs": 100,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 233
+    },
+    {
+      "fps": 58.386411889596594,
+      "avgMs": 17.12727272727273,
+      "p99Ms": 16.90000000000009,
+      "maxMs": 100,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 264
+    },
+    {
+      "fps": 58.54824255700488,
+      "avgMs": 17.079931972789115,
+      "p99Ms": 16.90000000000009,
+      "maxMs": 100,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 294
+    },
+    {
+      "fps": 60.00360021601296,
+      "avgMs": 16.665666666666667,
+      "p99Ms": 16.800000000000182,
+      "maxMs": 16.90000000000009,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 300
+    },
+    {
+      "fps": 60.00360021601296,
+      "avgMs": 16.665666666666667,
+      "p99Ms": 16.800000000000182,
+      "maxMs": 16.899999999999636,
+      "drawCalls": 21,
+      "triangles": 14020,
+      "samples": 300
+    }
+  ]
+}

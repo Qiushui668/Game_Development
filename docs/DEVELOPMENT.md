@@ -79,6 +79,7 @@ Game_Development/
 | 帧时间尖刺 | 着色器编译 / wasm 初始化 | 一次性，可预热 |
 | 首次加载慢 | 主包 4.9 MB（three + Rapier wasm） | 发版前考虑 `manualChunks` |
 | pip 触发整页刷新 | Vite 监听 `.venv` | 已在 `vite.config.ts` 的 `server.watch.ignored` 排除 |
+| draw call 暴涨 | `BoxGeometry` 配 6 面材质数组 = 每块 6 个 draw | 地形改用「平面 + 实体块」拆分 |
 | 突然变卡 | 向日葵虚拟显示器抢主屏 | 排查 `OrayIddDriver Device` |
 
 ## 6. Git

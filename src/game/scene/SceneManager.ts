@@ -30,13 +30,13 @@ export class SceneManager {
     container.appendChild(canvas)
 
     this.scene = new THREE.Scene()
-    this.scene.background = new THREE.Color(COLORS.sky)
-    this.scene.fog = new THREE.Fog(COLORS.sky, RENDER.fogNear, RENDER.fogFar)
+    this.scene.background = new THREE.Color(COLORS.skyBottom)
+    this.scene.fog = new THREE.Fog(COLORS.fog, RENDER.fogNear, RENDER.fogFar)
 
     this.camera = new THREE.PerspectiveCamera(RENDER.fov, 16 / 9, RENDER.near, RENDER.far)
-    // M1 阶段用固定观察机位，俯视整条赛道；M2 换成 FollowCamera
-    this.camera.position.set(0, 11, 24)
-    this.camera.lookAt(0, 1.5, -60)
+    // M1 阶段用固定观察机位，站在起点人群后方沿赛道看过去；M2 换成 FollowCamera
+    this.camera.position.set(0, 11.5, 33)
+    this.camera.lookAt(0, 3.2, -50)
 
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(container)

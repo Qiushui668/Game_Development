@@ -127,18 +127,20 @@ export class Game {
     this.ready = false
   }
 
-  /** 固定物理步：先步进物理，再把位姿同步给渲染层 */
+  /** 固定物理步：先步进物理，再把位姿与装饰动画同步给渲染层 */
   private readonly onFixedUpdate = (h: number): void => {
     if (!this.physics) return
-    void h
     this.physics.step()
-    this.world?.sync()
+    this.world?.update(h)
   }
 
-  /** 渲染帧：只记录帧时间与出图，不做玩法逻辑 */
+  /** 渲染帧：只记录帧时间、跟随相机 + 出图，不做玩法逻辑 */
   private readonly onRender = (dtReal: number): void => {
     this.frameTimes.push(dtReal * 1000)
     if (this.frameTimes.length > FRAME_WINDOW) this.frameTimes.shift()
+    if (this.manager && this.environment) {
+      this.environment.followCamera(this.manager.camera)
+    }
     this.manager?.render()
   }
 }

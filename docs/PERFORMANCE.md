@@ -33,6 +33,21 @@
 
 启动阶段（首帧后 10 帧内）观测到一次 50 ms 的尖刺，来源是着色器编译与 Rapier wasm 初始化，属一次性成本，稳定后消失。
 
+### 2.1 M1.5 视觉基线实测（糖果美术 + 障碍装饰）
+
+| 指标 | 实测 | 预算 | 结论 |
+| --- | --- | --- | --- |
+| FPS | 60.0 | ≥ 30（目标 60） | 达标 |
+| avg 帧时间 | 16.67 ms | ≤ 33.3 ms | 达标 |
+| P99 帧时间 | 16.80 ms | ≤ 50 ms | 达标 |
+| max 帧时间 | 17.40 ms | — | 无尖刺 |
+| draw calls | 21 | ≤ 60 | 达标 |
+| 三角面 | 14 020 | ≤ 30 k | 达标 |
+
+新增内容：棋盘地面、粉色护栏、6 排条纹栏架、3 根滚轴、4 根旋转扫地杆、终点皇冠、54 个 InstancedMesh 人群、渐变天空穹顶、两档远山、云。
+
+**踩过的坑**：地面最初用「BoxGeometry + 6 面材质数组」，每块地面退化成 6 个 draw call，总量从 21 涨到 49。改成「1 个棋盘平面 + 1 个实体块」后回到 21。**带材质数组的 Box 不要用于大面积地形。**
+
 ## 3. 已生效的画质降级（针对 GT 610）
 
 | 策略 | 取值 | 位置 |
@@ -42,7 +57,10 @@
 | 渲染分辨率 | 上限 1280×720，超出用 CSS 拉伸 | `RENDER.maxWidth/maxHeight` |
 | 实时阴影 | 关闭（`shadowMap.enabled = false`） | `SceneManager` |
 | 色调映射 | `NoToneMapping` | `SceneManager` |
-| 雾效 | 90–220 m，裁掉远处细节 | `RENDER.fogNear/fogFar` |
+| 雾效 | 170–420 m，远端赛道仍清晰，只压住远山 | `RENDER.fogNear/fogFar` |
+| 远裁剪面 | 300（给天空穹顶与远山留余量） | `RENDER.far` |
+| 天空 | 渐变 CanvasTexture 穹顶，跟随相机 | `Environment` |
+| 人群 | `InstancedMesh` 一次 draw 画 54 个 | `World.buildCrowd` |
 | 材质 | 仅 `MeshLambertMaterial`（廉价光照模型） | `Materials` |
 | 合批 | 护栏、拱门、远山各自 mergeGeometries | `World` / `Environment` |
 | 光源 | 1 平行光 + 1 半球光，无点光无投影 | `Lighting` |
@@ -77,3 +95,4 @@ npm run dev
 | 阶段 | 日期 | FPS | P99 | draw | tri | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
 | M1 框架+赛道骨架 | 2026-11-20 | 60.0 | 16.80 ms | 8 | 190 | 基线 |
+| M1.5 糖果视觉基线 | 2026-11-20 | 60.0 | 16.80 ms | 21 | 14 020 | 加障碍装饰，仍 60 FPS |
