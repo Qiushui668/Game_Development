@@ -1,0 +1,9 @@
+# 后端依赖（全部装进项目 .venv）
+# 安装：.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+
+# 阶段 B（局域网 2–5 人）：WebSocket 服务端
+websockets==17.4
+
+# 阶段 G（上线 2–8 人）再启用，现阶段不装
+# fastapi==0.115.*
+# uvicorn[standard]==0.32.*

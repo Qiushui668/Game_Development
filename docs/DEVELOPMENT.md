@@ -1,0 +1,88 @@
+# 开发指南
+
+## 1. 环境
+
+| 依赖 | 版本 | 位置 |
+| --- | --- | --- |
+| Node | v22.13.1 | `E:\Program Files\nodejs`（已在 Machine PATH） |
+| npm | 10.9.2 | 同上 |
+| npm 缓存 | `E:\npm-cache` | 用户级 `C:\Users\Administrator\.npmrc` |
+| Python | 3.11.5 | `D:\Python\Python311` |
+| 项目虚拟环境 | `.venv`（pip 26.3 / setuptools 84.2.1 / websockets 17.4） | `E:\DoubaoWork\Game_Development\.venv` |
+
+### 必须遵守的环境约定
+
+- **所有 Python 模块装进项目 `.venv`**，不装全局。
+- 调用 Python 只用 `.\.venv\Scripts\python.exe`；直接敲 `python` 可能解析到别的解释器。
+- npm 缓存已迁到 E 盘。若在代理/CI 型 shell 里执行，需显式指定：
+  ```powershell
+  $env:NPM_CONFIG_CACHE='E:\npm-cache'
+  ```
+  普通 cmd / PowerShell / Git Bash 下 `.npmrc` 生效，无需额外设置。
+- 本机命令统一走 PowerShell 5.1：`&&` / `||` 不可用，用 `;` 或 `if ($?) { }`；没有 `head` / `touch` / `mkdir -p`。
+
+## 2. 常用命令
+
+```powershell
+npm install          # 安装前端依赖
+npm run dev          # 开发服务器 http://localhost:5173（strictPort）
+npm run build        # vue-tsc --noEmit && vite build
+npm run typecheck    # 仅类型检查
+npm run preview      # 预览 dist
+```
+
+后端（阶段 B 起）：
+
+```powershell
+.\.venv\Scripts\python.exe backend\server.py
+```
+
+## 3. 目录结构
+
+```
+Game_Development/
+├─ index.html
+├─ package.json / tsconfig.json / vite.config.ts
+├─ src/
+│  ├─ main.ts / App.vue
+│  ├─ views/GameView.vue
+│  ├─ styles/global.css
+│  ├─ components/game/   GameCanvas.vue / DebugOverlay.vue
+│  ├─ game/
+│  │  ├─ core/   GameConfig / GameLoop / GameState / Game
+│  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World
+│  │  └─ utils/  MathUtils
+│  └─ types/     network.ts（协议冻结）
+├─ backend/      阶段 B 的 Python 服务端
+├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
+├─ tools/        perf_probe.py（性能探针）
+└─ .venv/
+```
+
+> 注意：V1.1 文档 §4 原写 `py-party-run/` 子目录，实际因 `.venv` 在根目录，应用代码直接放在仓库根。以本节为准。
+
+## 4. 代码硬约束
+
+1. **物理层纯 TS**：`src/game/core` 与未来 `physics/` 目录禁止 `import three`、禁止触碰 DOM。目的是将来能原样搬进 Node 做服务端复算。
+2. **帧循环不碰响应式**：`GameLoop` 内禁止写 Pinia、禁止改 DOM；HUD 用 4 Hz 快照拉取（`GameCanvas.vue` 的 `setInterval`）。
+3. **常量集中**：所有可调数值进 `GameConfig.ts`，不散落在模块里。
+4. **共享材质**：`Materials.ts` 输出单例，禁止在循环里 `new THREE.MeshLambertMaterial`。
+5. **静态几何 `matrixAutoUpdate = false`**，减少每帧矩阵计算。
+6. **协议以 `src/types/network.ts` 为准**，改字段必须同步 `docs/NETWORK_PROTOCOL.md` 并升 `PROTOCOL_VERSION`。
+
+## 5. 已验证的坑
+
+| 现象 | 原因 | 处置 |
+| --- | --- | --- |
+| 画面跳/瞬移 | 追帧 | `maxSubSteps = 2`，丢积压步 |
+| 移动平台带不走角色 | `KinematicCharacterController` 不自动携带 | 每帧手动加平台位移（阶段 C） |
+| 帧时间尖刺 | 着色器编译 / wasm 初始化 | 一次性，可预热 |
+| 首次加载慢 | 主包 4.9 MB（three + Rapier wasm） | 发版前考虑 `manualChunks` |
+| pip 触发整页刷新 | Vite 监听 `.venv` | 已在 `vite.config.ts` 的 `server.watch.ignored` 排除 |
+| 突然变卡 | 向日葵虚拟显示器抢主屏 | 排查 `OrayIddDriver Device` |
+
+## 6. Git
+
+- 主分支 `main`，小步提交，提交信息中文 + 阶段前缀，例如 `M1: 框架与场景骨架`。
+- 里程碑打 tag：`m1`、`m2`……
+- `dist/`、`node_modules/`、`.venv/` 不入库。
