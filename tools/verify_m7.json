@@ -1,8 +1,18 @@
 {
   "url": "http://localhost:5173/",
-  "collectedAt": "2026-11-21 18:59:46",
+  "collectedAt": "2026-11-21 22:14:15",
   "pass": true,
   "results": [
+    {
+      "name": "进站先要昵称（未确认前不显示单人/多人）",
+      "ok": true,
+      "detail": "{\"gate\": true, \"modes\": 0}"
+    },
+    {
+      "name": "昵称写进本地记忆（下次自动填）",
+      "ok": true,
+      "detail": "saved=房主甲"
+    },
     {
       "name": "首页展示单人 / 多人两个入口",
       "ok": true,
@@ -11,7 +21,7 @@
     {
       "name": "创建房间得到 4 位房间号",
       "ok": true,
-      "detail": "code=8459"
+      "detail": "code=8465"
     },
     {
       "name": "只有 1 人时开始按钮禁用（最少 2 人）",
@@ -46,27 +56,72 @@
     {
       "name": "房主跑动被第二台机器看到（远端位置更新）",
       "ok": true,
-      "detail": "z 3.50 -> -6.61"
+      "detail": "z 3.50 -> -6.78"
+    },
+    {
+      "name": "双方头顶昵称与本人大门填的一致",
+      "ok": true,
+      "detail": "{\"p1\": {\"text\": \"房主甲\", \"y\": 2.3, \"visible\": true, \"parent\": true}, \"p2\": {\"text\": \"玩家乙\", \"y\": 2.3, \"visible\": true, \"parent\": true}}"
+    },
+    {
+      "name": "HUD 有血条（HP/100）与击杀数",
+      "ok": true,
+      "detail": "hud=HP100/100击杀 0"
+    },
+    {
+      "name": "初始满血 100",
+      "ok": true,
+      "detail": "{\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 0, \"hurtFlash\": 0, \"deathFlash\": 0, \"killFlash\": 0}"
     },
     {
       "name": "房主已经面向对手（朝向跟着移动走）",
       "ok": true,
-      "detail": "yaw=3.11"
+      "detail": "yaw=3.12"
     },
     {
-      "name": "重击前对面站着没被打",
+      "name": "开打前对面站着没被打",
       "ok": true,
       "detail": ""
     },
     {
-      "name": "重击一次就让对面倒地眩晕",
+      "name": "轻击每下 -34（100 → 66 → 32）",
       "ok": true,
-      "detail": "{\"lightHits\": 0, \"knockdowns\": 1, \"stunLeft\": 0.7499999999999992, \"down\": true}"
+      "detail": "hp=[66, 32, 100]"
     },
     {
-      "name": "轻击三次才让对面倒地",
+      "name": "轻击三下打到 0 血",
       "ok": true,
-      "detail": "knockdowns 1 -> 2"
+      "detail": "hp=[66, 32, 100]"
+    },
+    {
+      "name": "血量归零：回起点并回满 100",
+      "ok": true,
+      "detail": "hp=100 deaths=1 z=3.50"
+    },
+    {
+      "name": "轻击三次仍然触发了倒地眩晕",
+      "ok": true,
+      "detail": "knockdowns 0 -> 1"
+    },
+    {
+      "name": "击杀者记 1 杀",
+      "ok": true,
+      "detail": "kills 0 -> 1"
+    },
+    {
+      "name": "杀敌时真的调用了 1杀.mp3",
+      "ok": true,
+      "detail": "{\"killPlays\": 1, \"blocked\": 1, \"src\": \"/audio/kill.mp3\"}"
+    },
+    {
+      "name": "重击一次就让对面倒地眩晕",
+      "ok": true,
+      "detail": "{\"lightHits\": 0, \"knockdowns\": 2, \"stunLeft\": 0.6999999999999991, \"down\": true}"
+    },
+    {
+      "name": "重击 -70（满血 100 → 30）",
+      "ok": true,
+      "detail": "hp=30"
     },
     {
       "name": "答题中被打倒会中断答题",
@@ -79,19 +134,29 @@
       "detail": "race=Racing"
     },
     {
+      "name": "这一下是打倒不是打死（血量 100 → 30）",
+      "ok": true,
+      "detail": "hp=30 deaths=1"
+    },
+    {
       "name": "结算面板列出两人成绩",
       "ok": true,
-      "detail": "[\"1房主甲11.44 s\", \"2玩家乙13.20 s\"]"
+      "detail": "[\"1房主甲1 杀12.46 s\", \"2玩家乙0 杀14.23 s\"]"
     },
     {
       "name": "成绩是服务器算的完赛时间（都有效）",
       "ok": true,
-      "detail": "[\"11.44 s\", \"13.20 s\"]"
+      "detail": "[\"12.46 s\", \"14.23 s\"]"
+    },
+    {
+      "name": "结算榜单带击杀列，且全场击杀数 > 0",
+      "ok": true,
+      "detail": "[\"1 杀\", \"0 杀\"]"
     },
     {
       "name": "双人联机下帧率仍 >= 30",
       "ok": true,
-      "detail": "fps=59.4 p99=16.9 ms draw=46"
+      "detail": "fps=58.6 p99=33.4 ms draw=61"
     }
   ]
 }

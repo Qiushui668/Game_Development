@@ -6,11 +6,13 @@ import {
   type PerfSnapshot,
   type QuizSnapshot,
   type RaceSnapshot,
+  type StatusSnapshot,
 } from '@/game/core/Game'
 import DebugOverlay from '@/components/game/DebugOverlay.vue'
 import RaceHud from '@/components/game/RaceHud.vue'
 import QuizPanel from '@/components/game/QuizPanel.vue'
 import { backToLobby, onGameEvent, room, roomClient } from '@/net/roomStore'
+import { recallColor, recallNickname } from '@/game/core/Profile'
 
 const props = defineProps<{ online: boolean }>()
 const emit = defineEmits<{ exit: [] }>()
@@ -19,6 +21,7 @@ const host = ref<HTMLElement | null>(null)
 const stats = shallowRef<PerfSnapshot | null>(null)
 const race = shallowRef<RaceSnapshot | null>(null)
 const quiz = shallowRef<QuizSnapshot | null>(null)
+const status = shallowRef<StatusSnapshot | null>(null)
 const error = ref<string | null>(null)
 
 let game: Game | null = null
@@ -26,17 +29,19 @@ let timer = 0
 let raceTimer = 0
 let unsubGame: (() => void) | null = null
 
-/** 把当前房间状态包成 Game 认识的最小网网络接口 */
+/** 把当前房间状态包成 Game 认识的最小网络接口 */
 function buildNet(): NetConfig | null {
   if (!props.online) return null
   const me = room.players.find((p) => p.id === room.selfId)
   return {
     selfId: room.selfId,
+    nickname: me?.nickname ?? recallNickname() ?? '玩家',
+    color: me?.color ?? recallColor(),
     slot: me?.slot ?? 0,
     playerCount: Math.max(1, room.players.length),
     peers: room.players
       .filter((p) => p.id !== room.selfId)
-      .map((p) => ({ id: p.id, color: p.color, slot: p.slot })),
+      .map((p) => ({ id: p.id, nickname: p.nickname, color: p.color, slot: p.slot })),
     send: (ev) => roomClient.send(ev),
   }
 }
@@ -59,7 +64,10 @@ onMounted(async () => {
             instance.playRemoteAttack(ev.playerId, ev.kind, ev.side)
             break
           case 'take_hit':
-            instance.receiveNetHit(ev.kind, ev.x, ev.z)
+            instance.receiveNetHit(ev.kind, ev.x, ev.z, ev.fromId)
+            break
+          case 'player_died':
+            instance.applyPeerDeath(ev.playerId, ev.killerId)
             break
           case 'game_started':
             instance.forceMatchStart()
@@ -81,6 +89,7 @@ onMounted(async () => {
     raceTimer = window.setInterval(() => {
       race.value = instance.getRace()
       quiz.value = instance.getQuiz()
+      status.value = instance.getStatus()
     }, 100)
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -119,6 +128,7 @@ onBeforeUnmount(() => {
 
     <RaceHud
       :race="race"
+      :status="status"
       :online="online"
       :board="online ? room.board : []"
       @restart="restartRace"

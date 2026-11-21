@@ -46,7 +46,7 @@ export const TRACK = {
   runoff: 12,
 } as const
 
-/** 障碍（扫地杆 / 滚轴）的判定与击退参数 */
+/** 障碍（扫地杆 / 滚轴 / 地刺 / 摆锤）的判定与击退参数 */
 export const OBSTACLE = {
   /** 扫地杆摆臂半径（判定与几何共用） */
   armRadius: 0.5,
@@ -58,7 +58,20 @@ export const OBSTACLE = {
   stunSeconds: 0.9,
   /** 同一次接触的重复命中间隔，防止贴边连击 */
   hitCooldown: 0.35,
+  /** 被任何障碍命中统一扣的生命值 */
+  damage: 10,
+  /** 柱子转速整体倍率（用户要求"加快"） */
+  sweepSpeedScale: 1.6,
 } as const
+
+/** 生命值规则（用户指定：满血 100，障碍 10，轻击 34，重击 70） */
+export const HEALTH = {
+  max: 100,
+  obstacleDamage: OBSTACLE.damage,
+  lightDamage: 34,
+  heavyDamage: 70,
+} as const
+
 
 /** 角色（M2 使用，先定格，避免后续改动协议与手感基准） */
 export const PLAYER = {
@@ -155,6 +168,14 @@ export const COLORS = {
   /** 攻击命中冲击环：浅击偏冷白、重击偏暖黄，都要在青粉棋盘上跳出来 */
   impactLight: 0xf4ffff,
   impactHeavy: 0xffd84d,
+
+  /** 地刺：金属紫尖刺 + 深色底板（在青粉棋盘上立刻辨认） */
+  spike: 0xb06bff,
+  spikeBase: 0x5b3a86,
+
+  /** 大摆锤：紫色锤头 + 亮黄锤柄横杆 */
+  pendulum: 0x8a4dff,
+  pendulumArm: 0xffd84d,
 } as const
 
 /** 起点人群的果冻小人配色 */

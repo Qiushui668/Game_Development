@@ -5,6 +5,7 @@
  */
 import { reactive } from 'vue'
 import { RoomClient } from '@/net/RoomClient'
+import { recallColor, recallNickname, saveColor, saveNickname } from '@/game/core/Profile'
 import {
   defaultRoomUrl,
   MIN_PLAYERS,
@@ -147,21 +148,10 @@ export function backToLobby(): void {
 
 /** 进直播间后仍要保留的名字与颜色，下次打开自动填好 */
 export function rememberIdentity(nickname: string, color: string): void {
-  try {
-    window.localStorage.setItem('ppr:nickname', nickname)
-    window.localStorage.setItem('ppr:color', color)
-  } catch {
-    /* 隐私模式下忽略 */
-  }
+  saveNickname(nickname)
+  saveColor(color)
 }
 
 export function recallIdentity(): { nickname: string; color: string } {
-  try {
-    return {
-      nickname: window.localStorage.getItem('ppr:nickname') ?? '',
-      color: window.localStorage.getItem('ppr:color') ?? '',
-    }
-  } catch {
-    return { nickname: '', color: '' }
-  }
+  return { nickname: recallNickname(), color: recallColor() }
 }

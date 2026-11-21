@@ -21,6 +21,8 @@ const nickname = ref('')
 const color = ref('#ff3f8b')
 const code = ref('')
 const busy = ref(false)
+/** 昵称门：必须先确认昵称，才露出单人 / 多人入口 */
+const named = ref(false)
 
 const hex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`
 const swatches = CROWD_COLORS.slice(0, 8).map(hex)
@@ -38,6 +40,15 @@ watch([nickname, color], () => {
 
 const inRoom = computed(() => room.status === 'lobby' || room.status === 'connecting')
 const canSubmit = computed(() => nickname.value.trim().length > 0 && !busy.value)
+
+/** 确认昵称：写入本地记忆，然后才显示模式选择 */
+function confirmNickname(): void {
+  const name = nickname.value.trim().slice(0, 12)
+  if (!name) return
+  nickname.value = name
+  rememberIdentity(name, color.value)
+  named.value = true
+}
 
 function pickColor(c: string): void {
   color.value = c
@@ -93,7 +104,44 @@ function openMulti(): void {
       <!-- 已经在房间里：直接进大厅 -->
       <RoomLobby v-if="inRoom" />
 
+      <template v-else-if="!named">
+        <!-- 昵称门：先输入昵称，确认后才显示单人 / 多人 -->
+        <form class="gate" @submit.prevent="confirmNickname">
+          <h2>先给自己起个名字</h2>
+          <p class="gate-sub">昵称会显示在人物头顶，也会出现在联机榜单里</p>
+          <div class="gate-form">
+            <input
+              v-model="nickname"
+              class="gate-input"
+              maxlength="12"
+              placeholder="输入昵称（最多 12 字）"
+              autofocus
+            />
+            <button class="primary gate-go" type="submit" :disabled="!nickname.trim()">进入游戏</button>
+          </div>
+          <div class="gate-colors">
+            <span class="gate-label">配色</span>
+            <button
+              v-for="c in swatches"
+              :key="c"
+              class="swatch"
+              :class="{ on: c === color }"
+              type="button"
+              :style="{ background: c }"
+              :aria-label="c"
+              @click="pickColor(c)"
+            />
+          </div>
+        </form>
+      </template>
+
       <template v-else>
+        <div class="whoami">
+          <span class="whoami-dot" :style="{ background: color }" />
+          <span>以「{{ nickname }}」的身份游戏</span>
+        <button class="relink" @click="named = false">改昵称</button>
+        </div>
+
         <div v-if="panel === 'none'" class="modes">
           <button class="mode solo" @click="emit('solo')">
             <span class="icon">🏁</span>
@@ -115,23 +163,10 @@ function openMulti(): void {
           </div>
 
           <div class="form">
-            <label class="field">
-              <span>昵称</span>
-              <input v-model="nickname" maxlength="12" placeholder="最多 12 字" />
-            </label>
-
-            <div class="field">
-              <span>颜色</span>
-              <div class="swatches">
-                <button
-                  v-for="c in swatches"
-                  :key="c"
-                  class="swatch"
-                  :class="{ on: c === color }"
-                  :style="{ background: c }"
-                  @click="pickColor(c)"
-                />
-              </div>
+            <div class="identity">
+              <span class="swatch on" :style="{ background: color }" />
+              <span class="identity-name">{{ nickname }}</span>
+              <span class="identity-hint">昵称与配色已在上面确认</span>
             </div>
 
             <label v-if="tab === 'join'" class="field">
@@ -350,6 +385,125 @@ h1 {
 .modes {
   display: flex;
   gap: 18px;
+}
+
+/* 昵称门 */
+.gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(480px, 92vw);
+  padding: 26px 28px 24px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 40px rgba(10, 50, 74, 0.22), inset 0 2px 0 #fff;
+}
+
+.gate h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #0e3550;
+}
+
+.gate-sub {
+  margin: -6px 0 4px;
+  font-size: 12.5px;
+  color: #4f7286;
+  text-align: center;
+}
+
+.gate-form {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.gate-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 16px;
+  border: 2px solid rgba(16, 138, 134, 0.2);
+  border-radius: 14px;
+  background: #fff;
+  color: #0e3550;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+}
+
+.gate-input:focus {
+  border-color: #17c9c0;
+}
+
+.gate-go {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+.gate-colors {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gate-label {
+  margin-right: 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #33586d;
+}
+
+/* 已确认昵称后的身份条 */
+.whoami {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+  color: #24485c;
+}
+
+.whoami-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.relink {
+  margin-left: 4px;
+  border: none;
+  background: none;
+  color: #1a8f8b;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(16, 138, 134, 0.08);
+}
+
+.identity-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0e3550;
+}
+
+.identity-hint {
+  font-size: 11.5px;
+  color: #6b8698;
 }
 
 .mode {

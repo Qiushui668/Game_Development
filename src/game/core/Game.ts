@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import { MATCH, PHYSICS, PLAYER, TRACK } from '@/game/core/GameConfig'
+import { HEALTH, MATCH, PHYSICS, PLAYER, TRACK } from '@/game/core/GameConfig'
 import { GameLoop } from '@/game/core/GameLoop'
 import { RaceStateMachine, type RaceState } from '@/game/core/GameState'
 import { SceneManager } from '@/game/scene/SceneManager'
@@ -13,6 +13,7 @@ import { JellyBean } from '@/game/actor/JellyBean'
 import { FollowCamera } from '@/game/actor/FollowCamera'
 import { percentile } from '@/game/utils/MathUtils'
 import { Music } from '@/game/audio/Music'
+import { Sfx } from '@/game/audio/Sfx'
 import { QuizSystem, QUIZ_GATES, type QuizPhase } from '@/game/quiz/QuizSystem'
 import {
   AttackSystem,
@@ -20,6 +21,9 @@ import {
   HitTracker,
   type AttackKind,
 } from '@/game/combat/AttackSystem'
+import { HealthState } from '@/game/combat/Health'
+import { NameTag } from '@/game/actor/NameTag'
+import { parseColor, recallColor, recallNickname } from '@/game/core/Profile'
 import { RemotePlayer } from '@/game/net/RemotePlayer'
 import type { ClientEvent, NetAttackKind, PlayerStatePayload } from '@/types/network'
 
@@ -27,12 +31,16 @@ import type { ClientEvent, NetAttackKind, PlayerStatePayload } from '@/types/net
 export interface NetConfig {
   /** 服务器分配的玩家 id */
   selfId: string
+  /** 自己的昵称（渲染在头顶） */
+  nickname: string
+  /** 自己的配色（名牌描边用） */
+  color: string
   /** 自己的站位序号 0..7 */
   slot: number
   /** 房间人数（决定起跑线站位宽度） */
   playerCount: number
-  /** 其他人：id + 色号 + 站位 */
-  peers: { id: string; color: string; slot: number }[]
+  /** 其他人：id + 昵称 + 色号 + 站位 */
+  peers: { id: string; nickname: string; color: string; slot: number }[]
   send: (ev: ClientEvent) => void
 }
 
@@ -64,6 +72,22 @@ export interface RaceSnapshot {
   finishMs: number | null
   /** 本次会话最好成绩 */
   bestMs: number | null
+}
+
+/** 生命值 / 击杀快照：HUD 10 Hz 拉取 */
+export interface StatusSnapshot {
+  hp: number
+  maxHp: number
+  /** 本局击杀数（只有把别人打到 0 才计） */
+  kills: number
+  /** 本局死亡次数 */
+  deaths: number
+  /** 受击/死亡提示剩余秒（>0 时 HUD 抖动/闪红） */
+  hurtFlash: number
+  /** 死亡复活提示剩余秒 */
+  deathFlash: number
+  /** 连续击杀计时（>0 时 HUD 显示"击杀！"） */
+  killFlash: number
 }
 
 const FRAME_WINDOW = 300
@@ -111,7 +135,20 @@ export class Game {
   private jelly: JellyBean | null = null
   private followCam: FollowCamera | null = null
   private music: Music | null = null
+  private sfx: Sfx | null = null
   private audioGesture: (() => void) | null = null
+
+  /** 生命值（满血 100，障碍 -10，轻击 -34，重击 -70） */
+  private readonly health = new HealthState()
+  /** 本局击杀数 */
+  private kills = 0
+  /** 头顶名牌（自己的；远端的归 RemotePlayer 自己管） */
+  private ownTag: NameTag | null = null
+  private hurtFlashT = 0
+  private deathFlashT = 0
+  private killFlashT = 0
+  /** 最近 20 次伤害（调试/验收看每次扣了多少） */
+  private readonly damageLog: Array<{ amount: number; cause: string; hpAfter: number; dead: boolean }> = []
 
   /** 答题玩法（抽题 / 冻结 / 已解开的墙） */
   private readonly quiz = new QuizSystem()
@@ -186,7 +223,14 @@ export class Game {
     this.player = player
     this.jelly = jelly
 
-    // 其他人：一个玩家一个果冻人，只换色，几何共用
+    // 头顶昵称：单人也显示（用户要求"进入游戏后昵称显示在人物头上"）
+    const ownName = this.net?.nickname ?? recallNickname() ?? ''
+    const ownColor = this.net?.color ?? recallColor()
+    const tag = new NameTag(ownName, parseColor(ownColor, 0x2fe0d6))
+    tag.attachTo(jelly.group)
+    this.ownTag = tag
+
+    // 其他人：一个玩家一个果冻人，只换色，几何共用；名牌用各自昵称
     if (this.net) {
       for (const peer of this.net.peers) {
         this.addRemote(peer)
@@ -198,6 +242,7 @@ export class Game {
 
     // 背景音乐：浏览器要求用户手势才能出声，首次点击/按键时启动
     this.music = new Music()
+    this.sfx = new Sfx()
     const startAudio = (): void => this.music?.start()
     this.audioGesture = startAudio
     manager.canvas.addEventListener('pointerdown', startAudio, { once: true })
@@ -250,6 +295,8 @@ export class Game {
               ? {
                   sweeperAngles: [...this.world.obstacles.sweepAngles],
                   rollAngles: [...this.world.obstacles.rollAngles],
+                  spikeRise: [...this.world.obstacles.spikeRise],
+                  pendulumAngles: [...this.world.obstacles.pendulumAngles],
                 }
               : null,
           getTrack: () => ({ length: TRACK.length, finishZ: TRACK.finishZ, spawnZ: MATCH.spawnZ }),
@@ -291,6 +338,34 @@ export class Game {
             for (let i = 0; i < QUIZ_GATES.length; i++) this.world?.openQuizGate(i)
           },
           getMusic: () => this.music?.snapshot() ?? null,
+          /** 自动化验收用：生命值 / 击杀快照 */
+          getStatus: () => this.getStatus(),
+          /** 自动化验收用：头顶昵称名牌（文字 + 离地高度 + 是否可见） */
+          getNameTag: () =>
+            this.ownTag
+              ? {
+                  text: this.ownTag.text,
+                  y: this.ownTag.sprite.position.y,
+                  visible: this.ownTag.sprite.visible,
+                  parent: this.ownTag.sprite.parent === this.jelly?.group,
+                }
+              : null,
+          /** 自动化验收用：读击杀音效的播放次数（验证 1杀.mp3 真的被调用） */
+          getSfx: () => this.sfx?.snapshot() ?? null,
+          /** 自动化验收用：直接扣血（cause 决定来源标签） */
+          damage: (amount: number, cause: 'obstacle' | 'light' | 'heavy' = 'obstacle') =>
+            this.applyDamage(amount, cause, null),
+          /** 自动化验收用：把自己打空血，走完整死亡复活流程 */
+          killSelf: () => this.applyDamage(HEALTH.max, 'obstacle', null),
+          /** 自动化验收用：回满血（不改位置，不回起点） */
+          resetHealth: () => {
+            this.health.reset()
+            return this.health.hp
+          },
+          /** 自动化验收用：最近的伤害流水（每次扣了多少、来源、剩余血量） */
+          getDamageLog: () => this.damageLog.map((d) => ({ ...d })),
+          /** 自动化验收用：模拟收到别人的死亡广播（killerId 传自己 id 才算击杀） */
+          peerDied: (playerId: string, killerId: string | null) => this.applyPeerDeath(playerId, killerId),
           /** 自动化验收用：出招（'light' | 'heavy'），返回是否真的起手 */
           attack: (kind: AttackKind) => this.tryAttack(kind),
           /** 自动化验收用：读攻击状态机 + 手臂角度（验证姿态真的动了） */
@@ -320,7 +395,8 @@ export class Game {
           /** 自动化验收用：模拟收到别人的位置包 / 出招 / 命中 */
           pushRemoteState: (id: string, payload: PlayerStatePayload) => this.applyRemoteState(id, payload),
           remoteAttack: (id: string, kind: NetAttackKind, side: number) => this.playRemoteAttack(id, kind, side),
-          takeHit: (kind: NetAttackKind, fromX: number, fromZ: number) => this.receiveNetHit(kind, fromX, fromZ),
+          takeHit: (kind: NetAttackKind, fromX: number, fromZ: number, fromId = '') =>
+            this.receiveNetHit(kind, fromX, fromZ, fromId),
           /** 自动化验收用：跳过 3 秒倒数，直接进入 Racing */
           startNow: () => {
             if (this.race.state === 'Countdown') {
@@ -365,12 +441,11 @@ export class Game {
   }
 
   /** 加一个远程玩家（换色不重建几何） */
-  private addRemote(peer: { id: string; color: string; slot: number }): void {
+  private addRemote(peer: { id: string; nickname: string; color: string; slot: number }): void {
     if (this.remotes.has(peer.id) || !this.manager) return
-    const parsed = Number.parseInt(peer.color.replace('#', ''), 16)
-    const color = Number.isFinite(parsed) ? parsed : 0xff3f8b
+    const color = parseColor(peer.color, 0xff3f8b)
     const x = this.slotX(peer.slot, this.net?.playerCount ?? 1)
-    const remote = new RemotePlayer(peer.id, color, [x, 0.35, MATCH.spawnZ])
+    const remote = new RemotePlayer(peer.id, color, [x, 0.35, MATCH.spawnZ], peer.nickname)
     this.manager.scene.add(remote.jelly.group)
     this.remotes.set(peer.id, remote)
   }
@@ -395,10 +470,15 @@ export class Game {
   }
 
   /**
-   * 自己被别人打中（由服务器转发）。规则与单机一致：轻击 3 次 / 重击 1 次倒地，
-   * 倒地眩晕 1 s，正在答题则直接中断；另按来向给一点击退，看得出是被谁打的。
+   * 自己被别人打中（由服务器转发）。轻击 −34、重击 −70，同时保留原有击退与硬直：
+   * 轻击累计 3 次 / 重击 1 次倒地眩晕 1 s（此时血量通常也已见底）。
    */
-  receiveNetHit(kind: NetAttackKind, fromX: number, fromZ: number): { down: boolean; interrupted: boolean } {
+  receiveNetHit(
+    kind: NetAttackKind,
+    fromX: number,
+    fromZ: number,
+    fromId = '',
+  ): { down: boolean; interrupted: boolean } {
     const st = this.player?.read()
     if (this.player && st) {
       const dx = st.x - fromX
@@ -413,7 +493,7 @@ export class Game {
         this.player.applyFlinch(dirX, dirZ, 1.6)
       }
     }
-    return this.hitPlayer(kind)
+    return this.hitPlayer(kind, fromId || null)
   }
 
   /** 服务器发令开跑：本地倒数立刻收尾，全场同一帧起跑 */
@@ -486,6 +566,11 @@ export class Game {
     this.attack.reset()
     this.practiceTarget.reset()
     this.selfHits.reset()
+    this.health.reset()
+    this.kills = 0
+    this.hurtFlashT = 0
+    this.deathFlashT = 0
+    this.killFlashT = 0
     this.interruptFlashT = 0
     this.world?.resetQuizGates()
     this.music?.duck(false)
@@ -527,15 +612,79 @@ export class Game {
   }
 
   /**
-   * 自己被别的玩家打中（单机阶段没有敌人，只有调试钩子调这个）。
-   * 轻击累计 3 次、重击 1 次 → 倒地眩晕 1 s；如果此时正在答题，答题直接作废。
+   * 自己被别人打中（单机阶段只有调试钩子调这个）。
+   * 先扣血：轻击 −34、重击 −70；再按旧规则累计倒地（轻击 3 次 / 重击 1 次）眩晕 1 s。
+   * 血量归零则走死亡流程（回起点满血复活），此时答题必然中断。
    */
-  hitPlayer(kind: AttackKind): { down: boolean; interrupted: boolean } {
+  hitPlayer(kind: AttackKind, killerId: string | null = null): { down: boolean; interrupted: boolean } {
     const out = this.selfHits.apply(kind)
-    if (!out.knockdown) return { down: false, interrupted: false }
-    this.player?.applyStun(COMBAT_RULES.knockdownSeconds)
-    const interrupted = this.interruptQuiz()
-    return { down: true, interrupted }
+    const dead = this.applyDamage(
+      kind === 'heavy' ? HEALTH.heavyDamage : HEALTH.lightDamage,
+      kind,
+      killerId,
+    )
+    let interrupted = false
+    if (dead) {
+      interrupted = true
+    } else if (out.knockdown) {
+      this.player?.applyStun(COMBAT_RULES.knockdownSeconds)
+      interrupted = this.interruptQuiz()
+    }
+    return { down: out.knockdown || dead, interrupted }
+  }
+
+  /**
+   * 扣血入口：所有伤害统一从这里走。
+   * 返回"这一下是否致死"；致死时立刻执行回起点复活。
+   */
+  private applyDamage(amount: number, cause: 'obstacle' | 'light' | 'heavy', killerId: string | null): boolean {
+    if (this.race.state !== 'Racing' && this.race.state !== 'Paused') return false
+    const dead = this.health.damage(amount, cause)
+    this.damageLog.push({ amount, cause, hpAfter: this.health.hp, dead })
+    if (this.damageLog.length > 20) this.damageLog.shift()
+    this.hurtFlashT = 0.45
+    if (dead) this.onDeath(killerId)
+    return dead
+  }
+
+  /** 死亡：从起点复活并回满 100 血；正在答题则中断（题作废、墙不拆） */
+  private onDeath(killerId: string | null): void {
+    this.interruptQuiz()
+    // 联机：把自己被打死 + 谁杀的报给服务器，服务器再广播给全场（击杀数在击杀者那边记）
+    if (this.net) this.net.send({ type: 'died', killerId })
+    this.deathFlashT = 1.6
+    this.player?.teleport(this.spawnX, this.spawnY, this.spawnZ)
+    this.followCam?.snap()
+    // 站起来的 0.45 s 里不接受输入，避免刚落地就被同一根柱子再扫一次
+    this.player?.applyStun(0.45)
+    this.health.reset()
+    // 倒地计数不因死亡清零（是"本局被打倒几次"的统计），只在重开一局时复位
+    this.attack.reset()
+    this.debugAxes = null
+  }
+
+  /** 别人死亡（服务器广播）：清掉他的插值缓冲直接瞬移回起点；若是我杀的，记一次击杀 */
+  applyPeerDeath(playerId: string, killerId: string | null): void {
+    this.remotes.get(playerId)?.snapToSpawn()
+    const mine = this.net !== null && killerId === this.net.selfId
+    if (mine) {
+      this.kills++
+      this.killFlashT = 1.8
+      this.sfx?.playKill()
+    }
+  }
+
+  /** 供 HUD 以 10 Hz 拉取的生命值 / 击杀快照 */
+  getStatus(): StatusSnapshot {
+    return {
+      hp: this.health.hp,
+      maxHp: HEALTH.max,
+      kills: this.kills,
+      deaths: this.health.deaths,
+      hurtFlash: this.hurtFlashT,
+      deathFlash: this.deathFlashT,
+      killFlash: this.killFlashT,
+    }
   }
 
   /**
@@ -645,6 +794,11 @@ export class Game {
     this.audioGesture = null
     this.music?.dispose()
     this.music = null
+    this.sfx?.dispose()
+    this.sfx = null
+
+    this.ownTag?.dispose()
+    this.ownTag = null
 
     if (this.jelly && this.manager) {
       this.manager.scene.remove(this.jelly.group)
@@ -702,6 +856,9 @@ export class Game {
     this.practiceTarget.tick(h)
     this.selfHits.tick(h)
     if (this.interruptFlashT > 0) this.interruptFlashT = Math.max(0, this.interruptFlashT - h)
+    if (this.hurtFlashT > 0) this.hurtFlashT = Math.max(0, this.hurtFlashT - h)
+    if (this.deathFlashT > 0) this.deathFlashT = Math.max(0, this.deathFlashT - h)
+    if (this.killFlashT > 0) this.killFlashT = Math.max(0, this.killFlashT - h)
     const hitKind = this.attack.tick(h)
     if (hitKind) this.onAttackHit(hitKind)
 
@@ -763,7 +920,14 @@ export class Game {
 
     if (this.race.state === 'Racing' || this.race.state === 'Respawning') {
       const hit = this.world?.obstacles.hit(st.x, st.y, st.z)
-      if (hit) player.applyKnockback(hit)
+      if (hit) {
+        // 击退自带 0.35 s 冷却：冷却中返回 false，这一刻不再重复扣血（一次接触只扣一次）
+        const applied = player.applyKnockback(hit)
+        if (applied) {
+          // 所有障碍（扫地杆 / 滚轴 / 地刺 / 摆锤）命中统一 −10 生命值
+          this.applyDamage(HEALTH.obstacleDamage, 'obstacle', null)
+        }
+      }
     }
 
     // 终点：脚底越过 finishZ 即完赛，并急停，避免顺着速度冲下终点平台

@@ -24,7 +24,7 @@
 
 消息编码：JSON，必须有 `type`。位置包字段刻意压短（`p` / `r` / `s` / `a`）以在 20 Hz 下省带宽。
 
-协议版本 `PROTOCOL_VERSION = 2`（v1 只有单机骨架；v2 加了 `hello`、攻击同步与 `back_to_lobby`）。握手时服务器下发 `hello`，版本不匹配由客户端拒绝进入游戏。
+协议版本 `PROTOCOL_VERSION = 3`（v1 只有单机骨架；v2 加了 `hello`、攻击同步与 `back_to_lobby`；v3 加了血量/死亡广播与击杀计数）。握手时服务器下发 `hello`，版本不匹配由客户端拒绝进入游戏。
 
 ## 3. 客户端 → 服务器
 
@@ -38,6 +38,7 @@
 | `player_state` | `payload: PlayerStatePayload` | 20 Hz | 位置/朝向/状态/速度归一化 |
 | `attack` | `kind: 'light'\|'heavy'`, `side` | 事件触发 | 出招动画广播，别人照着播 |
 | `attack_hit` | `targetId`, `kind`, `side`, `x`, `z` | 事件触发 | 攻击者本地判定打到了谁 |
+| `died` | `killerId: string \| null` | 事件触发 | 自己血量归零；`killerId` 为最后一击来源，障碍/自杀为 `null` |
 | `checkpoint` | `index`, `t` | 事件触发 | 顺序必须递增，跳号被拒 |
 | `finish` | `t` | 一次 | 到达终点；官方时间由服务器算 |
 | `ping` | `t` | 2 Hz | 估算 RTT |
@@ -63,10 +64,11 @@
 | `game_started` | — | 倒计时结束，全场同一时刻起跑 |
 | `player_state` | `playerId`, `payload` | 其他人的状态，20 Hz 中继，不回发给发送者 |
 | `attack_played` | `playerId`, `kind`, `side` | 别人出招，播动画 |
-| `take_hit` | `fromId`, `kind`, `x`, `z` | **你被打中了**：本地结算眩晕、击退与答题中断 |
+| `take_hit` | `fromId`, `kind`, `x`, `z` | **你被打中了**：本地扣血（轻击 −34 / 重击 −70）、击退与答题中断 |
+| `player_died` | `playerId`, `killerId` | 有人死了：受害者回起点满血；`killerId === 自己` 时击杀 +1 并播 `1杀.mp3` |
 | `checkpoint_updated` | `playerId`, `index` | 裁判确认后的进度 |
 | `player_finished` | `playerId`, `timeMs` | 服务器计算的完成时间 |
-| `leaderboard` | `rows[]` | 名次（未完赛 `timeMs = null`，排最后） |
+| `leaderboard` | `rows[]` | 名次（未完赛 `timeMs = null`，排最后）；每行带 `kills` |
 | `back_to_lobby` | — | 回到大厅 |
 | `error` | `code`, `message` | 见下表 |
 
@@ -90,12 +92,15 @@
 - 倒计时不下发绝对时刻，而是下发 `startsInMs`（还剩多少毫秒）+ `seconds`。两台机器的墙钟本来就不同，相对时长让客户端各自倒计时即可，开跑的真正对齐靠服务器在 3 s 后广播 `game_started`。
 - 客户端收到 `player_state` 时用**本地到达时刻**打戳，渲染时按 100 ms 延迟插值（`RemotePlayer`），因此不依赖两台机器的时钟同步。
 
-## 7. 战斗同步（B1）
+## 7. 战斗同步（B1 + 血量）
 
 - 出招：本地 `AttackSystem` 决定命中帧（轻击 0.16 s / 重击 1.0 s），到达命中帧时本地先算候选目标（`COMBAT_RULES.lightReach 2.1` / `heavyReach 2.9` / 半角 65° / 落差 2.2 m），命中则发 `attack_hit`。
-- 服务器只校验 `targetId` 在房间内且房间处于比赛中，然后把 `take_hit` 发给被打的人 —— **结算在被打端**：轻击累计 3 次（连击窗口 1.6 s）、重击 1 次 → 倒地眩晕 1 s，正在答题则中断答题。
+- 服务器只校验 `targetId` 在房间内且房间处于比赛中，然后把 `take_hit` 发给被打的人 —— **扣血与结算都在被打端**：轻击 −34、重击 −70，同时保留旧规则（轻击累计 3 次 / 重击 1 次 → 倒地眩晕 1 s，答题中断）。满血 100 时"轻击 3 下"恰好把血打空，两条规则自然收敛。
 - 轻击只推一小步（`applyFlinch`，1.6 m/s，不进硬直），重击是大击退（8 m/s + 0.9 s 硬直，倒地再叠到 1 s），所以连续轻击不会把人推出命中范围。
 - 倒地状态通过 `player_state.s = 'knock'` 传出去，远端照样播"四脚朝天"的失控姿态。
+- **死亡**：挨打端血量归零 → 本地回起点满血复活，并向服务器发 `died`（带 `killerId`）。服务器只做一件事：给击杀者 `kills += 1`，然后广播 `player_died` + 刷新 `leaderboard`。受害者的下一次 `player_state` 会直接把位置带到起点，远端 `RemotePlayer` 收到 `player_died` 后清空插值缓冲（`snapToSpawn`），不会出现 300 m 的滑行。
+- 击杀者本地也维护一份 `kills`，收到 `player_died` 且 `killerId === selfId` 时 +1 并播 `public/audio/kill.mp3`；服务器榜单是权威口径，结算面板用它。
+
 
 ## 8. 断线与重连
 

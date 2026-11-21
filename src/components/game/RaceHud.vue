@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { RaceSnapshot } from '@/game/core/Game'
+import type { RaceSnapshot, StatusSnapshot } from '@/game/core/Game'
 import type { LeaderboardRow } from '@/types/network'
 
 const props = defineProps<{
   race: RaceSnapshot | null
+  /** 生命值 / 击杀快照（10 Hz） */
+  status?: StatusSnapshot | null
   /** 多人局：结算面板改显示全场名次，按钮改成回房间 */
   online?: boolean
   board?: LeaderboardRow[]
@@ -32,10 +34,44 @@ const remaining = computed(() => Math.round(props.race?.remaining ?? 0))
 const rows = computed(() => props.board ?? [])
 const showBoard = computed(() => Boolean(props.online) && rows.value.length > 1)
 const againText = computed(() => (props.online ? '回房间' : '再跑一次'))
+
+/** 血条：满血青绿，半血黄，残血红 */
+const hp = computed(() => props.status?.hp ?? 100)
+const hpMax = computed(() => props.status?.maxHp ?? 100)
+const hpPct = computed(() => `${Math.max(0, Math.min(100, (hp.value / hpMax.value) * 100))}%`)
+const hpTint = computed(() => {
+  const r = hp.value / hpMax.value
+  if (r > 0.6) return 'linear-gradient(90deg, #35e07a, #2fe6dd)'
+  if (r > 0.3) return 'linear-gradient(90deg, #ffd23f, #ff8a3d)'
+  return 'linear-gradient(90deg, #ff5f5f, #ff3f8b)'
+})
+const kills = computed(() => props.status?.kills ?? 0)
+/** 受击抖动 / 死亡提示 */
+const hurt = computed(() => (props.status?.hurtFlash ?? 0) > 0)
+const dead = computed(() => (props.status?.deathFlash ?? 0) > 0)
+const killFlash = computed(() => (props.status?.killFlash ?? 0) > 0)
 </script>
 
 <template>
   <div class="hud">
+    <!-- 生命值 + 击杀：倒数结束到结算之间都显示 -->
+    <div v-if="timing || showCountdown" class="vitals" :class="{ hurt }">
+      <div class="hp-row">
+        <span class="label">HP</span>
+        <div class="hp-bar">
+          <div class="hp-fill" :style="{ width: hpPct, background: hpTint }" />
+        </div>
+        <span class="hp-num">{{ Math.max(0, Math.round(hp)) }}<i>/{{ hpMax }}</i></span>
+      </div>
+      <div class="kill-row">
+        <span class="kills">击杀 <b>{{ kills }}</b></span>
+        <span v-if="killFlash" class="kill-pop">击杀！</span>
+      </div>
+    </div>
+
+    <!-- 死亡提示 -->
+    <div v-if="dead" class="death-tip">被击倒 · 回起点满血复活</div>
+
     <!-- 计时条：倒数结束后出现 -->
     <div v-if="timing" class="timer">
       <div class="time">{{ timeText }}</div>
@@ -45,9 +81,9 @@ const againText = computed(() => (props.online ? '回房间' : '再跑一次'))
 
     <!-- 操作提示：只在对局中显示，结算面板会盖住 -->
     <div v-if="state === 'Racing'" class="controls">
-      <span class="key">左键</span>轻击
+      <span class="key">左键</span>轻击 -34
       <span class="sep">·</span>
-      <span class="key">右键</span>重击
+      <span class="key">右键</span>重击 -70
     </div>
 
     <!-- 起跑倒数 -->
@@ -61,12 +97,13 @@ const againText = computed(() => (props.online ? '回房间' : '再跑一次'))
       <div class="card">
         <div class="title">FINISH</div>
         <div class="score">{{ fmt(race?.finishMs ?? 0) }}</div>
-        <div class="line">最佳成绩 {{ bestText }}</div>
+        <div class="line">最佳成绩 {{ bestText }} · 本局击杀 {{ kills }}</div>
 
         <ol v-if="showBoard" class="board">
           <li v-for="(row, i) in rows" :key="row.playerId" class="row">
             <span class="rank">{{ i + 1 }}</span>
             <span class="who" :style="{ color: row.color }">{{ row.nickname }}</span>
+            <span class="row-kills">{{ row.kills ?? 0 }} 杀</span>
             <span class="row-time">{{ row.timeMs === null ? '未完成' : fmt(row.timeMs) }}</span>
           </li>
         </ol>
@@ -97,6 +134,110 @@ const againText = computed(() => (props.online ? '回房间' : '再跑一次'))
   box-shadow: 0 8px 24px rgba(8, 24, 40, 0.25);
   text-align: center;
   color: #f2fbff;
+}
+
+.vitals {
+  position: absolute;
+  left: 16px;
+  /* 左下角：避开左上角的调试条，同时贴近角色与操作提示 */
+  bottom: 54px;
+  min-width: 236px;
+  padding: 10px 14px 9px;
+  border-radius: 14px;
+  background: rgba(12, 26, 42, 0.62);
+  box-shadow: 0 8px 24px rgba(8, 24, 40, 0.25);
+  color: #f2fbff;
+  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
+}
+
+.vitals.hurt {
+  transform: translateX(-3px);
+  box-shadow: 0 0 0 2px rgba(255, 95, 95, 0.65), 0 8px 24px rgba(8, 24, 40, 0.25);
+}
+
+.hp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  opacity: 0.85;
+}
+
+.hp-bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+
+.hp-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.15s linear, background 0.2s linear;
+}
+
+.hp-num {
+  font-size: 15px;
+  font-weight: 800;
+  min-width: 54px;
+  text-align: right;
+}
+
+.hp-num i {
+  font-style: normal;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.kill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.92;
+}
+
+.kills b {
+  font-size: 16px;
+  color: #fff07a;
+}
+
+.kill-pop {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 240, 122, 0.18);
+  color: #fff07a;
+  font-weight: 800;
+  animation: pop 0.4s ease-out;
+}
+
+.death-tip {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  transform: translateX(-50%);
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: rgba(120, 20, 40, 0.72);
+  color: #ffe6ec;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  animation: pop 0.9s ease-out;
+}
+
+.row-kills {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff07a;
+  opacity: 0.9;
 }
 
 .time {

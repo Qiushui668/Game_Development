@@ -218,19 +218,36 @@ async def run(args: argparse.Namespace) -> int:
     p2 = await open_page(free_port(9481), args.url, "900,0", "900,620", "p2")
 
     try:
-        # ---------- 首页 ----------
+        # ---------- 首页：先昵称门，再模式选择 ----------
         for p in (p1, p2):
-            await p.wait("!!document.querySelector('.mode.online')", 25)
+            await p.wait("!!document.querySelector('.gate')", 25)
+        gate_only = await p1.js(
+            "(() => ({ gate: !!document.querySelector('.gate'), "
+            "modes: document.querySelectorAll('.mode').length }))()"
+        )
+        check(
+            "进站先要昵称（未确认前不显示单人/多人）",
+            gate_only["gate"] is True and gate_only["modes"] == 0,
+            json.dumps(gate_only),
+        )
+        await set_input(p1, ".gate-input", "房主甲")
+        await click(p1, ".gate-go")
+        await set_input(p2, ".gate-input", "玩家乙")
+        await click(p2, ".gate-go")
+        for p in (p1, p2):
+            await p.wait("!!document.querySelector('.mode.online')", 8)
+        saved = await p1.js("window.localStorage.getItem('ppr:nickname')")
+        check("昵称写进本地记忆（下次自动填）", saved == "房主甲", f"saved={saved}")
+
         modes = await p1.js(
             "(() => [...document.querySelectorAll('.mode .name')].map(e => e.textContent.trim()))()"
         )
         check("首页展示单人 / 多人两个入口", modes == ["单人游戏", "多人游戏"], json.dumps(modes, ensure_ascii=False))
         await p1.shot(Path(args.out) / "perf_m7_home.png")
 
-        # ---------- 房主建房 ----------
+        # ---------- 房主建房（昵称已在大门口确认过，房间面板不再问） ----------
         await click(p1, ".mode.online")
         await p1.wait("!!document.querySelector('.form')", 5)
-        await set_input(p1, ".field input", "房主甲")
         await click(p1, ".primary")
         code = await p1.wait(
             "(() => { const e = document.querySelector('.lobby .code'); "
@@ -249,7 +266,6 @@ async def run(args: argparse.Namespace) -> int:
         await p2.wait("!!document.querySelector('.form')", 5)
         await click(p2, ".tabs .tab:nth-child(2)")
         await p2.wait("!!document.querySelector('.field input.code')", 5)
-        await set_input(p2, ".field input:not(.code)", "玩家乙")
         await set_input(p2, ".field input.code", str(code))
         await click(p2, ".primary")
         await p2.wait("!!document.querySelector('.lobby')", 8)
@@ -299,7 +315,24 @@ async def run(args: argparse.Namespace) -> int:
             f"z {z_before:.2f} -> {z_after:.2f}",
         )
 
-        # ---------- 把两人摆到同一地点：重击一次即倒地 ----------
+        # ---------- 头顶昵称 + 血条 ----------
+        tag1 = await p1.js("window.__PPR.getNameTag()")
+        tag2 = await p2.js("window.__PPR.getNameTag()")
+        check(
+            "双方头顶昵称与本人大门填的一致",
+            tag1 and tag1["text"] == "房主甲" and tag2 and tag2["text"] == "玩家乙" and tag1["visible"],
+            json.dumps({"p1": tag1, "p2": tag2}, ensure_ascii=False),
+        )
+        hud = await p1.js(
+            "(() => { const v = document.querySelector('.vitals'); "
+            "return v ? v.textContent.replace(/\\s+/g, ' ').trim() : null; })()"
+        )
+        check("HUD 有血条（HP/100）与击杀数", hud is not None and "HP" in hud and "击杀" in hud, f"hud={hud}")
+
+        st_before = await p2.js("window.__PPR.getStatus()")
+        check("初始满血 100", st_before["hp"] == 100 and st_before["maxHp"] == 100, json.dumps(st_before))
+
+        # ---------- 把两人摆到同一地点：轻击 3 次 = 102 伤害 → 死亡回起点 ----------
         # 角色朝向跟着水平速度走（站着不动只保留上一帧朝向），
         # 所以先让房主朝 +Z 跑一小段把身子转过去，再一起瞬移到位。
         await p1.js("window.__PPR.setOrbit(180, 9)")
@@ -312,48 +345,91 @@ async def run(args: argparse.Namespace) -> int:
 
         facing = await p1.js("window.__PPR.getPlayer().yaw")
         check("房主已经面向对手（朝向跟着移动走）", abs(abs(facing) - 3.14) < 0.3, f"yaw={facing:.2f}")
-        check("重击前对面站着没被打", (await p2.js("window.__PPR.getSelfHits().knockdowns")) == 0)
+        check("开打前对面站着没被打", (await p2.js("window.__PPR.getSelfHits().knockdowns")) == 0)
 
-        await p1.js("window.__PPR.attack('heavy')")
-        await asyncio.sleep(1.25)
-        hits = await p2.js("window.__PPR.getSelfHits()")
-        stun = await p2.js("window.__PPR.getPlayer().stunned")
-        check("重击一次就让对面倒地眩晕", hits["knockdowns"] == 1 and stun is True, json.dumps(hits))
-        await p1.shot(Path(args.out) / "perf_m7_online.png")
-
-        await asyncio.sleep(1.1)
-
-        # ---------- 轻击三次才倒地 ----------
-        before = (await p2.js("window.__PPR.getSelfHits()"))["knockdowns"]
+        before_hits = (await p2.js("window.__PPR.getSelfHits()"))["knockdowns"]
+        before_kills = (await p1.js("window.__PPR.getStatus()"))["kills"]
+        before_plays = (await p1.js("window.__PPR.getSfx()"))["killPlays"]
+        hp_trace = []
         for _ in range(3):
             # 每下之前把乙拉回攻击范围（轻击也会把对面推走一点）
             await p2.js("window.__PPR.teleport(1.0, 0.35, -28.8)")
             await asyncio.sleep(0.25)
             await p1.js("window.__PPR.attack('light')")
-            await asyncio.sleep(0.55)
-        await asyncio.sleep(0.3)
-        after = (await p2.js("window.__PPR.getSelfHits()"))["knockdowns"]
-        check("轻击三次才让对面倒地", after == before + 1, f"knockdowns {before} -> {after}")
+            await asyncio.sleep(0.6)
+            hp_trace.append((await p2.js("window.__PPR.getStatus()"))["hp"])
+        await asyncio.sleep(0.4)
+        after_hits = (await p2.js("window.__PPR.getSelfHits()"))["knockdowns"]
+        check(
+            "轻击每下 -34（100 → 66 → 32）",
+            hp_trace[:2] == [66, 32],
+            f"hp={hp_trace}",
+        )
+        check("轻击三下打到 0 血", hp_trace[-1] == 0 or after_hits == before_hits + 1, f"hp={hp_trace}")
 
-        # ---------- 答题中被打倒：中断答题 ----------
-        await asyncio.sleep(1.1)
+        st_after = await p2.js("window.__PPR.getStatus()")
+        pos_after = await p2.js("window.__PPR.getPlayer()")
+        check(
+            "血量归零：回起点并回满 100",
+            st_after["hp"] == 100 and st_after["deaths"] == 1 and abs(pos_after["z"] - 3.5) < 0.6,
+            f"hp={st_after['hp']} deaths={st_after['deaths']} z={pos_after['z']:.2f}",
+        )
+        check("轻击三次仍然触发了倒地眩晕", after_hits == before_hits + 1, f"knockdowns {before_hits} -> {after_hits}")
+
+        atk = await p1.js("window.__PPR.getStatus()")
+        sfx = await p1.js("window.__PPR.getSfx()")
+        check(
+            "击杀者记 1 杀",
+            atk["kills"] == before_kills + 1,
+            f"kills {before_kills} -> {atk['kills']}",
+        )
+        check(
+            "杀敌时真的调用了 1杀.mp3",
+            sfx["killPlays"] == before_plays + 1 and sfx["src"].endswith("kill.mp3"),
+            json.dumps(sfx, ensure_ascii=False),
+        )
+        await p1.shot(Path(args.out) / "perf_m7_online.png")
+
+        # ---------- 重击 -70 ----------
+        await asyncio.sleep(0.8)
         await p2.js("window.__PPR.teleport(1.0, 0.35, -28.8)")
+        await asyncio.sleep(0.3)
+        await p1.js("window.__PPR.attack('heavy')")
+        await asyncio.sleep(1.3)
+        hits = await p2.js("window.__PPR.getSelfHits()")
+        stun = await p2.js("window.__PPR.getPlayer().stunned")
+        st_heavy = await p2.js("window.__PPR.getStatus()")
+        check("重击一次就让对面倒地眩晕", hits["knockdowns"] == 2 and stun is True, json.dumps(hits))
+        check("重击 -70（满血 100 → 30）", st_heavy["hp"] == 30, f"hp={st_heavy['hp']}")
+
+        await asyncio.sleep(1.1)
+
+        # ---------- 答题中被重击打倒：中断答题 ----------
+        await asyncio.sleep(1.1)
+        # 先把乙回满血：30 血吃一发重击会直接死，死亡同样会中断答题，
+        # 但这里要单独验证"被打倒"这条路径（血量不归零）
+        await p2.js("window.__PPR.resetHealth()")
+        await p2.js("window.__PPR.teleport(1.0, 0.35, -28.8)")
+        await asyncio.sleep(0.35)
         await p2.js("window.__PPR.startQuiz(0)")
         await p2.wait("window.__PPR.getQuiz().phase === 'asking'", 6)
-        for _ in range(3):
-            await p2.js("window.__PPR.teleport(1.0, 0.35, -28.8)")
-            await asyncio.sleep(0.2)
-            await p1.js("window.__PPR.attack('light')")
-            await asyncio.sleep(0.55)
-        await asyncio.sleep(0.25)
+        await asyncio.sleep(0.2)
+        await p1.js("window.__PPR.attack('heavy')")
+        await asyncio.sleep(1.3)
         quiz = await p2.js("window.__PPR.getQuiz()")
         race = await p2.js("window.__PPR.getRace()")
+        st_quiz = await p2.js("window.__PPR.getStatus()")
         check(
             "答题中被打倒会中断答题",
             quiz["phase"] == "off" and quiz["interrupted"] is True,
             f"phase={quiz['phase']} interrupted={quiz['interrupted']}",
         )
         check("中断后回到 Racing，题面不再占屏", race["state"] == "Racing", f"race={race['state']}")
+        check(
+            "这一下是打倒不是打死（血量 100 → 30）",
+            st_quiz["hp"] == 30 and st_quiz["deaths"] == 1,
+            f"hp={st_quiz['hp']} deaths={st_quiz['deaths']}",
+        )
         await p2.shot(Path(args.out) / "perf_m7_quiz_interrupt.png")
 
         # ---------- 冲线：服务器计时 + 榜单 ----------
@@ -381,6 +457,16 @@ async def run(args: argparse.Namespace) -> int:
             "成绩是服务器算的完赛时间（都有效）",
             isinstance(times, list) and len(times) == 2 and all(t not in ("未完成", "") for t in times),
             json.dumps(times, ensure_ascii=False),
+        )
+
+        kills_col = await p1.js(
+            "(() => [...document.querySelectorAll('.result .board .row .row-kills')].map(e => e.textContent.trim()))()"
+        )
+        kills_nums = [int("".join(ch for ch in k if ch.isdigit()) or 0) for k in (kills_col or [])]
+        check(
+            "结算榜单带击杀列，且全场击杀数 > 0",
+            isinstance(kills_col, list) and len(kills_col) == 2 and sum(kills_nums) >= 1,
+            json.dumps(kills_col, ensure_ascii=False),
         )
 
         # ---------- 性能：双客户端仍在可玩帧率 ----------

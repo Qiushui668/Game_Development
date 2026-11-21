@@ -120,6 +120,7 @@ MEASURE_JS = r"""
 
   // ---------- 3. 轻击 3 次才打断 ----------
   P.teleport(0, 0.05, -78 + 2.2);
+  P.resetHealth();              // 上一段吃了重击，先回满血再测"3 次轻击才倒"
   await sleep(700);
   P.startQuiz(0);
   await sleep(250);
@@ -246,7 +247,7 @@ async def main() -> int:
             while time.time() < deadline:
                 # B 阶段起首页先展示：自动化从"单人游戏"点进去
                 await cdp.eval_js(
-                    "(() => { const b = document.querySelector('.mode.solo'); if (b) b.click(); return !!b; })()"
+                    "(() => { const gi = document.querySelector('.gate-input'); if (gi && !gi.value) { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(gi, '验收员'); gi.dispatchEvent(new Event('input', { bubbles: true })); } const go = document.querySelector('.gate-go'); if (go && !go.disabled) go.click(); const b = document.querySelector('.mode.solo'); if (b) b.click(); return !!b; })()"
                 )
                 ready = await cdp.eval_js("!!(window.__PPR && window.__PPR.hitPlayer)")
                 if ready:

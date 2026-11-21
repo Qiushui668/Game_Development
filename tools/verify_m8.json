@@ -1,0 +1,77 @@
+{
+  "url": "http://localhost:5173/",
+  "collectedAt": "2026-11-21 22:20:30",
+  "pass": true,
+  "results": [
+    {
+      "name": "进站先要昵称，未确认前没有单人/多人按钮",
+      "ok": true,
+      "detail": "{\"gate\": true, \"modes\": 0, \"names\": []}"
+    },
+    {
+      "name": "确认昵称后才出现单人 / 多人",
+      "ok": true,
+      "detail": "{\"gate\": false, \"modes\": 2, \"names\": [\"单人游戏\", \"多人游戏\"]}"
+    },
+    {
+      "name": "初始满血 100、头顶有昵称名牌",
+      "ok": true,
+      "detail": "{\"status\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 0, \"hurtFlash\": 0, \"deathFlash\": 0, \"killFlash\": 0}, \"tag\": {\"text\": \"验收员\", \"y\": 2.3, \"visible\": true, \"parent\": true}, \"race\": \"Racing\"}"
+    },
+    {
+      "name": "人物头顶名牌挂在角色上（离地 2.3 m）",
+      "ok": true,
+      "detail": "{\"text\": \"验收员\", \"y\": 2.3, \"visible\": true, \"parent\": true}"
+    },
+    {
+      "name": "柱子转速加快（实测 ≈2.16 rad/s）",
+      "ok": true,
+      "detail": "Δ=2.16 rad/s（基准 1.35 → ×1.6 = 2.16）"
+    },
+    {
+      "name": "新增地刺 4 条且会周期顶起",
+      "ok": true,
+      "detail": "count=4 max=1.00"
+    },
+    {
+      "name": "新增大摆锤 2 根且会摆动（摆角 ≈±0.8 rad）",
+      "ok": true,
+      "detail": "maxAbs=0.94"
+    },
+    {
+      "name": "走进地刺被命中 −10（伤害流水里障碍扣血恒为 10）",
+      "ok": true,
+      "detail": "hpTrace=[100, 90] amounts=[10]"
+    },
+    {
+      "name": "右鍵重击 -70（100 → 30）",
+      "ok": true,
+      "detail": "100 → 30"
+    },
+    {
+      "name": "左键轻击 -34（30 → 0 直接打死）",
+      "ok": true,
+      "detail": "heavy=[70] light=[34] hp=100 deaths=1"
+    },
+    {
+      "name": "血量归零回起点并回满 100",
+      "ok": true,
+      "detail": "hp=100 z=3.50"
+    },
+    {
+      "name": "自杀式清空血量同样回起点（deaths 递增）",
+      "ok": true,
+      "detail": "hp=100 deaths=2 z=3.50"
+    },
+    {
+      "name": "1杀.mp3 随包提供（/audio/kill.mp3 可访问）",
+      "ok": true,
+      "detail": "{\"snapshot\": {\"killPlays\": 0, \"blocked\": 0, \"src\": \"/audio/kill.mp3\"}, \"audioOk\": true}"
+    },
+    {
+      "name": "HUD 血条 + 击杀数 + 伤害提示",
+      "ok": true,
+      "detail": "{\"vitals\": \"HP100/100击杀 0\", \"controls\": \"左键轻击 -34 ·右键重击 -70\"}"
+    }
+  ]
+}

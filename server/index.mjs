@@ -14,7 +14,7 @@ const PORT = Number(process.env.PORT ?? 8000)
 const HOST = process.env.HOST ?? '0.0.0.0'
 const CAPACITY = 8
 const MIN_PLAYERS = 2
-const PROTOCOL_VERSION = 2
+const PROTOCOL_VERSION = 3
 const COUNTDOWN_MS = 3000
 const KNOCKDOWN_SECONDS = 1
 
@@ -46,7 +46,7 @@ function cleanColor(raw) {
   return '#ff3f8b'
 }
 
-/** @typedef {{ id: string, nickname: string, color: string, ws: import('ws').WebSocket, slot: number, joinedAt: number, finished: boolean, timeMs: number | null, checkpoint: number, falls: number }} Member */
+/** @typedef {{ id: string, nickname: string, color: string, ws: import('ws').WebSocket, slot: number, joinedAt: number, finished: boolean, timeMs: number | null, checkpoint: number, falls: number, kills: number }} Member */
 /** @typedef {{ code: string, hostId: string, state: 'lobby' | 'countdown' | 'racing', members: Member[], raceStartAt: number, countdownTimer: ReturnType<typeof setTimeout> | null }} Room */
 
 function roomPlayers(room) {
@@ -98,6 +98,7 @@ function leaderboard(room) {
       timeMs: m.timeMs,
       checkpoint: m.checkpoint,
       falls: m.falls,
+      kills: m.kills,
       finished: m.finished,
     }))
     .sort((a, b) => {
@@ -146,6 +147,7 @@ function joinCommon(session, room, nickname, color) {
     timeMs: null,
     checkpoint: -1,
     falls: 0,
+    kills: 0,
   }
   room.members.push(member)
   session.room = room
@@ -170,6 +172,7 @@ function startGame(room) {
     m.timeMs = null
     m.checkpoint = -1
     m.falls = 0
+    m.kills = 0
   }
   broadcast(room, { type: 'countdown', seconds: COUNTDOWN_MS / 1000, startsInMs: COUNTDOWN_MS })
   room.countdownTimer = setTimeout(() => {
@@ -293,6 +296,7 @@ function handle(session, msg) {
         m.timeMs = null
         m.checkpoint = -1
         m.falls = 0
+        m.kills = 0
       }
     }
     broadcast(room, { type: 'back_to_lobby' })
@@ -330,8 +334,30 @@ function handle(session, msg) {
     return
   }
 
-  if (msg.type === 'checkpoint') {
+  if (msg.type === 'died') {
     if (room.state !== 'racing') return
+    const victim = room.members.find((m) => m.id === session.id)
+    if (!victim) return
+    // killerId 必须指向本房间里的另一个人，否则按"被障碍/自己搞死"处理
+    const killer =
+      typeof msg.killerId === 'string' && msg.killerId !== session.id
+        ? room.members.find((m) => m.id === msg.killerId) ?? null
+        : null
+    if (killer) killer.kills += 1
+    // 全场广播（含自己）：击杀者在客户端据此 +1 并播 1杀.mp3
+    broadcast(room, {
+      type: 'player_died',
+      playerId: victim.id,
+      killerId: killer ? killer.id : null,
+    })
+    if (killer) {
+      console.log(`[room] ${room.code} ${killer.nickname} 击杀 ${victim.nickname}（累计 ${killer.kills}）`)
+    }
+    broadcast(room, { type: 'leaderboard', rows: leaderboard(room) })
+    return
+  }
+
+  if (msg.type === 'checkpoint') {    if (room.state !== 'racing') return
     const member = room.members.find((m) => m.id === session.id)
     if (!member) return
     const index = Number(msg.index)

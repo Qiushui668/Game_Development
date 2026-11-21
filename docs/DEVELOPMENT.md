@@ -47,28 +47,28 @@ Game_Development/
 ├─ scripts/dev.mjs          一键联调：Vite(0.0.0.0) + 房间服务，打印局域网地址
 ├─ src/
 │  ├─ main.ts / App.vue（首页 ⇄ 游戏 视图切换）
-│  ├─ views/     HomeView.vue（单人 / 多人入口）/ GameView.vue
+│  ├─ views/     HomeView.vue（昵称门 → 单人 / 多人入口）/ GameView.vue
 │  ├─ styles/global.css
 │  ├─ components/
 │  │  ├─ home/   RoomLobby.vue（房间号·玩家位 2–8·房主开始·离开）
-│  │  └─ game/   GameCanvas.vue / DebugOverlay.vue / RaceHud.vue（计时·倒数·结算·多人榜单）/ QuizPanel.vue
+│  │  └─ game/   GameCanvas.vue / DebugOverlay.vue / RaceHud.vue（血条·击杀·计时·倒数·结算·多人榜单）/ QuizPanel.vue
 │  ├─ net/       RoomClient.ts（WebSocket 封装）/ roomStore.ts（房间响应式状态 + 游戏事件总线）
 │  ├─ game/
-│  │  ├─ core/   GameConfig / GameLoop / GameState / Game
+│  │  ├─ core/   GameConfig / GameLoop / GameState / Game / Profile（昵称与配色的本地记忆）
 │  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World / QuizWalls（答题空气墙）
-│  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）
-│  │  ├─ net/    RemotePlayer（远端果冻人 + 100 ms 插值缓冲）
-│  │  ├─ physics/ ObstacleField（障碍布局 + 命中判定，纯 TS，服务端可复用）
+│  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）/ NameTag（头顶昵称 Sprite）
+│  │  ├─ net/    RemotePlayer（远端果冻人 + 100 ms 插值缓冲 + 自己的名牌）
+│  │  ├─ physics/ ObstacleField（扫地杆/滚轴/地刺/摆锤布局 + 命中判定，纯 TS，服务端可复用）
 │  │  ├─ quiz/   QuizSystem（墙位 / 抽题 / 冻结读秒，纯 TS，服务端可复用）
-│  │  ├─ combat/ AttackSystem（出招状态机 + 轻击 3 次/重击 1 次击倒规则 + 判定距离，纯 TS）
-│  │  ├─ audio/  Music（单条 audio 循环 + 答题 duck）
+│  │  ├─ combat/ AttackSystem（出招状态机 + 击倒规则 + 判定距离）/ Health（血量与伤害表，纯 TS）
+│  │  ├─ audio/  Music（单条 audio 循环 + 答题 duck）/ Sfx（击杀音效，元素池支持连杀叠加）
 │  │  ├─ data/   questions.ts（由 `tools/build_questions.py` 从 Excel 生成，勿手改）
 │  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃/F/左右键攻击的边沿触发）
 │  │  └─ utils/  MathUtils
-│  └─ types/     network.ts（协议 v2）
-├─ public/audio/ danzai.mp3（背景音乐）
+│  └─ types/     network.ts（协议 v3）
+├─ public/audio/ danzai.mp3（背景音乐）/ kill.mp3（1杀音效）
 ├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
-├─ tools/        smoke_room.mjs（服务端协议 23 项）/ verify_m7.py（双客户端 18 项）/ perf_probe.py / verify_m2…m6.py / build_questions.py
+├─ tools/        smoke_room.mjs（服务端协议 23 项）/ verify_m7.py（双客户端 31 项）/ verify_m8.py（本轮 14 项）/ perf_probe.py / verify_m2…m6.py / build_questions.py
 └─ .venv/
 ```
 
@@ -124,6 +124,11 @@ Game_Development/
 | 双客户端自动化里第二个页面掉到 1 FPS | 同一个 Chrome 的后台标签被 rAF 降频 | 起**两个独立 Chrome 进程**（各自 profile / 调试端口 / 窗口位置），并带 `--disable-background-timer-throttling --disable-renderer-backgrounding --disable-features=CalculateNativeWinOcclusion` |
 | 开局倒计时两边不同步 | 各自从进入游戏那一刻开始倒数（init 快慢不同） | 服务器下发相对时长 `startsInMs`，3 s 后再广播 `game_started`，客户端收到就 `forceMatchStart()`；`init` 还没跑完时用 `pendingNetStart` 补发 |
 | 首页先展示后老验收脚本全挂 | `window.__PPR` 只在进游戏后才有 | `verify_m2…m6` 在等待循环里先点一次 `.mode.solo`（见各脚本注释） |
+| 加了昵称门后老脚本全挂在"点单人游戏" | 首页第一屏变成昵称输入，`.mode.solo` 不存在 | 等待循环里先填 `.gate-input` + 点 `.gate-go` 再点 `.mode.solo`（`perf_probe.ENTER_SOLO_JS` 统一封装） |
+| 站在地刺里一下掉 60 血 | 伤害没跟击退的 0.35 s 冷却联动，每帧都在扣 | `applyDamage` 只在 `applyKnockback` 返回 true 时调用（一次接触一次伤害） |
+| 地刺把人顶在原地连吃 | 击退速度只有 10.5×0.55，跳不出 3 m 长的刺阵 | 地刺击退给足（10.5 m/s + 3.2 上抛），一次接触就把人顶出刺阵 |
+| 轻击 3 下打死人后"倒地计数"归零，M6 断言变红 | `onDeath` 里把 `selfHits` 也 reset 了 | 倒地计数是"本局被打倒几次"的统计，死亡不清，只在重开一局时复位 |
+| 远端死亡后滑 300 m 回起点 | 100 ms 插值缓冲把"瞬移"当成位移 | `player_died` 到达时清空该远端的采样缓冲（`snapToSpawn`），下一包直接落到起点 |
 
 ## 6. Git
 

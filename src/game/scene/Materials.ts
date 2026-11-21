@@ -13,6 +13,10 @@ export interface MaterialSet {
   hurdle: THREE.MeshLambertMaterial
   sweeper: THREE.MeshLambertMaterial
   pin: THREE.MeshLambertMaterial
+  spike: THREE.MeshLambertMaterial
+  spikeBase: THREE.MeshLambertMaterial
+  pendulum: THREE.MeshLambertMaterial
+  pendulumArm: THREE.MeshLambertMaterial
   crown: THREE.MeshLambertMaterial
   mountainLight: THREE.MeshLambertMaterial
   mountainDeep: THREE.MeshLambertMaterial
@@ -94,6 +98,10 @@ export function getMaterials(): MaterialSet {
     hurdle: new THREE.MeshLambertMaterial({ map: stripe }),
     sweeper: new THREE.MeshLambertMaterial({ color: COLORS.sweeper }),
     pin: new THREE.MeshLambertMaterial({ color: COLORS.pin }),
+    spike: new THREE.MeshLambertMaterial({ color: COLORS.spike }),
+    spikeBase: new THREE.MeshLambertMaterial({ color: COLORS.spikeBase }),
+    pendulum: new THREE.MeshLambertMaterial({ color: COLORS.pendulum }),
+    pendulumArm: new THREE.MeshLambertMaterial({ color: COLORS.pendulumArm }),
     crown: new THREE.MeshLambertMaterial({ color: COLORS.crown }),
     mountainLight: new THREE.MeshLambertMaterial({ color: COLORS.mountainLight }),
     mountainDeep: new THREE.MeshLambertMaterial({ color: COLORS.mountainDeep }),

@@ -8,7 +8,9 @@ import {
   HURDLE_ROWS,
   HURDLE_THICKNESS,
   ObstacleField,
+  PENDULUMS,
   ROLLERS,
+  SPIKE_STRIPS,
   SWEEPERS,
 } from '@/game/physics/ObstacleField'
 import { QuizWalls, QUIZ_WALL_COLLIDER_WIDTH, QUIZ_WALL_HEIGHT } from '@/game/scene/QuizWalls'
@@ -45,6 +47,10 @@ export class GameWorld {
   private readonly dynamics: DynamicEntry[] = []
   private readonly spinnerGroups: THREE.Group[] = []
   private readonly rollerGroups: THREE.Group[] = []
+  /** 地刺的刺阵网格（底板是静态的，只有刺阵上下动） */
+  private readonly spikeMeshes: THREE.Mesh[] = []
+  /** 大摆锤的摆动枢轴组 */
+  private readonly pendulumGroups: THREE.Group[] = []
   /** 答题墙碰撞体；解开一面就删一个 */
   private readonly quizColliders: Array<RAPIER.Collider | null> = []
 
@@ -54,6 +60,8 @@ export class GameWorld {
       this.buildRails(),
       this.buildHurdles(),
       this.buildPins(),
+      this.buildSpikes(),
+      this.buildPendulums(),
       this.buildRamp(),
       this.buildFinishGate(),
       this.buildCrown(),
@@ -78,6 +86,14 @@ export class GameWorld {
     }
     for (let i = 0; i < this.rollerGroups.length; i++) {
       this.rollerGroups[i].rotation.x = this.obstacles.rollAngles[i]
+    }
+    // 地刺：刺阵整体上下平移，rise=0 时刺尖刚好齐地面
+    for (let i = 0; i < this.spikeMeshes.length; i++) {
+      this.spikeMeshes[i].position.y = (this.obstacles.spikeRise[i] - 1) * SPIKE_STRIPS[i].height
+    }
+    // 大摆锤：绕 Z 轴摆，摆角从 ObstacleField 读，判定与画面同一份
+    for (let i = 0; i < this.pendulumGroups.length; i++) {
+      this.pendulumGroups[i].rotation.z = this.obstacles.pendulumAngles[i]
     }
     this.quizWalls.update(dt)
   }
@@ -106,6 +122,8 @@ export class GameWorld {
     this.dynamics.length = 0
     this.spinnerGroups.length = 0
     this.rollerGroups.length = 0
+    this.spikeMeshes.length = 0
+    this.pendulumGroups.length = 0
     this.quizWalls.dispose()
     this.group.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.InstancedMesh) o.geometry.dispose()
@@ -226,9 +244,111 @@ export class GameWorld {
     return group
   }
 
+  /**
+   * 地刺：静态深色底板（永远可见，提前预警）+ 会上下顶起的刺阵。
+   * 底板全部合并成 1 个 draw call，刺阵每块地刺 1 个（要单独动）。
+   */
+  private buildSpikes(): THREE.Group {
+    const group = new THREE.Group()
+    group.name = 'SpikeStrips'
+    const mats = getMaterials()
+
+    const baseGeos: THREE.BufferGeometry[] = []
+    for (const s of SPIKE_STRIPS) {
+      const base = new THREE.BoxGeometry(s.width, 0.12, s.length)
+      base.translate(0, 0.06, s.z)
+      baseGeos.push(base)
+    }
+    const baseMesh = new THREE.Mesh(mergeGeometries(baseGeos, false), mats.spikeBase)
+    baseGeos.forEach((g) => g.dispose())
+    baseMesh.matrixAutoUpdate = false
+    group.add(baseMesh)
+
+    for (const s of SPIKE_STRIPS) {
+      const geos: THREE.BufferGeometry[] = []
+      const cols = Math.max(3, Math.floor(s.width / 0.75))
+      const rows = Math.max(2, Math.round(s.length / 0.75))
+      for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+          const cx = -s.width / 2 + ((c + 0.5) * s.width) / cols
+          const cz = s.z - s.length / 2 + ((r + 0.5) * s.length) / rows
+          const h = s.height * (r === 1 ? 1 : 0.82)
+          // 四棱锥：面数少、轮廓硬，一眼看出是刺
+          const cone = new THREE.ConeGeometry(0.2, h, 4, 1)
+          cone.translate(cx, h / 2, cz)
+          geos.push(cone)
+        }
+      }
+      const merged = mergeGeometries(geos, false)
+      geos.forEach((g) => g.dispose())
+      const mesh = new THREE.Mesh(merged, mats.spike)
+      mesh.position.y = -s.height
+      this.spikeMeshes.push(mesh)
+      group.add(mesh)
+    }
+    return group
+  }
+
+  /**
+   * 大摆锤：静态门架（两立柱 + 横梁，1 draw）+ 绕横梁摆动的锤臂与锤头。
+   * 摆动枢轴组绕 Z 轴转，锤头位置与 ObstacleField.pendulumHead 完全一致。
+   */
+  private buildPendulums(): THREE.Group {
+    const group = new THREE.Group()
+    group.name = 'Pendulums'
+    const mats = getMaterials()
+
+    for (const p of PENDULUMS) {
+      const gantryGeos: THREE.BufferGeometry[] = []
+      const postX = TRACK.width / 2 - 0.6
+      for (const side of [-1, 1]) {
+        const post = new THREE.BoxGeometry(0.5, p.pivotY + 0.6, 0.5)
+        post.translate(p.x + side * postX, (p.pivotY + 0.6) / 2, p.z)
+        gantryGeos.push(post)
+      }
+      const beam = new THREE.BoxGeometry(postX * 2 + 0.5, 0.5, 0.6)
+      beam.translate(p.x, p.pivotY, p.z)
+      gantryGeos.push(beam)
+      const gantry = mergeGeometries(gantryGeos, false)
+      gantryGeos.forEach((g) => g.dispose())
+      const gantryMesh = new THREE.Mesh(gantry, mats.railDark)
+      gantryMesh.matrixAutoUpdate = false
+      group.add(gantryMesh)
+
+      const pivot = new THREE.Group()
+      pivot.position.set(p.x, p.pivotY, p.z)
+
+      const armGeos: THREE.BufferGeometry[] = []
+      const arm = new THREE.CylinderGeometry(0.16, 0.16, p.armLength, 8, 1)
+      arm.translate(0, -p.armLength / 2, 0)
+      armGeos.push(arm)
+      const armMesh = new THREE.Mesh(mergeGeometries(armGeos, false), mats.pendulumArm)
+      armGeos.forEach((g) => g.dispose())
+      pivot.add(armMesh)
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(p.headRadius, 12, 10), mats.pendulum)
+      head.position.set(0, -p.armLength, 0)
+      pivot.add(head)
+
+      // 锤头上的两道箍，让"锤"的轮廓更清楚
+      const bandGeos: THREE.BufferGeometry[] = []
+      for (const dy of [-0.34, 0.34]) {
+        const band = new THREE.CylinderGeometry(p.headRadius * 1.02, p.headRadius * 1.02, 0.16, 12, 1, true)
+        band.translate(0, -p.armLength + dy * p.headRadius, 0)
+        bandGeos.push(band)
+      }
+      const bandMesh = new THREE.Mesh(mergeGeometries(bandGeos, false), mats.pendulumArm)
+      bandGeos.forEach((g) => g.dispose())
+      pivot.add(bandMesh)
+
+      this.pendulumGroups.push(pivot)
+      group.add(pivot)
+    }
+    return group
+  }
+
   /** 旋转扫地杆：绕立柱公转，参考图的粉色大摆臂 */
-  private buildSpinners(): void {
-    for (const s of SWEEPERS) {
+  private buildSpinners(): void {    for (const s of SWEEPERS) {
       // 立柱 + 摆臂 + 端头合并成一个几何体：每根扫地杆只占 1 个 draw call
       const geos: THREE.BufferGeometry[] = []
       const post = new THREE.CylinderGeometry(0.42, 0.5, 2.0, 10)

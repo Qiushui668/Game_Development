@@ -4,8 +4,8 @@
  * 设计依据：开发实施说明书 V1.1 §12.1；B 阶段容量按用户需求定为 2–8 人。
  */
 
-/** 协议版本：加攻击同步与 hello 后升到 2，握手不匹配直接拒绝 */
-export const PROTOCOL_VERSION = 2
+/** 协议版本：加血量/死亡广播后升到 3，握手不匹配直接拒绝 */
+export const PROTOCOL_VERSION = 3
 
 /** 房间容量：局域网 2–8 人（用户指定）；上线阶段沿用 8 */
 export const ROOM_CAPACITY = 8
@@ -57,6 +57,8 @@ export type ClientEvent =
   | { type: 'attack'; kind: NetAttackKind; side: number }
   /** 命中上报：攻击者本地判定打到了谁（客户端权威，局域网熟人局） */
   | { type: 'attack_hit'; targetId: string; kind: NetAttackKind; side: number; x: number; z: number }
+  /** 自己血量归零：killerId 为最后一击的来源（障碍/自杀为 null），击杀数由服务器记 */
+  | { type: 'died'; killerId: string | null }
 
 export interface LeaderboardRow {
   playerId: string
@@ -66,6 +68,8 @@ export interface LeaderboardRow {
   timeMs: number | null
   checkpoint: number
   falls: number
+  /** 本局击杀数 */
+  kills: number
   finished: boolean
 }
 
@@ -86,6 +90,8 @@ export type ServerEvent =
   | { type: 'attack_played'; playerId: string; kind: NetAttackKind; side: number }
   /** 别人打中了我：本地结算眩晕与答题中断 */
   | { type: 'take_hit'; fromId: string; kind: NetAttackKind; x: number; z: number }
+  /** 有人死了：受害者回起点满血；killerId 与自己的 id 相同就记一次击杀 + 播击杀音效 */
+  | { type: 'player_died'; playerId: string; killerId: string | null }
   | { type: 'back_to_lobby' }
   | { type: 'error'; code: string; message: string }
 

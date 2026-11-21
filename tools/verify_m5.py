@@ -290,7 +290,7 @@ async def main() -> int:
             while time.time() < deadline:
                 # B 阶段起首页先展示：自动化从"单人游戏"点进去
                 await cdp.eval_js(
-                    "(() => { const b = document.querySelector('.mode.solo'); if (b) b.click(); return !!b; })()"
+                    "(() => { const gi = document.querySelector('.gate-input'); if (gi && !gi.value) { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(gi, '验收员'); gi.dispatchEvent(new Event('input', { bubbles: true })); } const go = document.querySelector('.gate-go'); if (go && !go.disabled) go.click(); const b = document.querySelector('.mode.solo'); if (b) b.click(); return !!b; })()"
                 )
                 ready = await cdp.eval_js("!!(window.__PPR && window.__PPR.attack)")
                 if ready:

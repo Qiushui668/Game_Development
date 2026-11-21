@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three'
 import { JellyBean } from '@/game/actor/JellyBean'
+import { NameTag } from '@/game/actor/NameTag'
 import { PLAYER } from '@/game/core/GameConfig'
 import type { PlayerState } from '@/game/actor/PlayerController'
 import type { PlayerStatePayload } from '@/types/network'
@@ -32,6 +33,7 @@ function shortestYawDelta(from: number, to: number): number {
 
 export class RemotePlayer {
   readonly jelly: JellyBean
+  private readonly tag: NameTag | null = null
   private readonly samples: Sample[] = []
   private x = 0
   private y = 0
@@ -57,6 +59,7 @@ export class RemotePlayer {
     readonly id: string,
     colorHex: number,
     spawn: [number, number, number],
+    nickname = '',
   ) {
     this.jelly = new JellyBean({ color: colorHex })
     this.x = spawn[0]
@@ -64,6 +67,15 @@ export class RemotePlayer {
     this.z = spawn[2]
     this.jelly.group.position.set(this.x, this.y, this.z)
     this.jelly.group.rotation.y = this.yaw
+    // 名字挂在角色 group 上，Sprite 自动面向相机
+    const tag = new NameTag(nickname || '玩家', colorHex)
+    tag.attachTo(this.jelly.group)
+    this.tag = tag
+  }
+
+  /** 对方死亡回起点：清空插值缓冲，下一包直接瞬移过去，不滑 300 m */
+  snapToSpawn(): void {
+    this.samples.length = 0
   }
 
   push(payload: PlayerStatePayload, nowMs: number): void {
@@ -138,6 +150,7 @@ export class RemotePlayer {
 
   dispose(): void {
     this.jelly.dispose()
+    this.tag?.dispose()
     this.samples.length = 0
   }
 }

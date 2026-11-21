@@ -106,6 +106,23 @@ RENDERER_JS = """(() => {
 })()"""
 
 
+# 首页现在先过昵称门：填名字 → 点"进入游戏" → 点"单人游戏"，一步到位，
+# 供探针与各验收脚本的等待循环复用（window.__PPR 只在进游戏后才存在）。
+ENTER_SOLO_JS = """(() => {
+  const gi = document.querySelector('.gate-input');
+  if (gi && !gi.value) {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    set.call(gi, '验收员');
+    gi.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  const go = document.querySelector('.gate-go');
+  if (go && !go.disabled) go.click();
+  const b = document.querySelector('.mode.solo');
+  if (b) b.click();
+  return !!(b && window.__PPR);
+})()"""
+
+
 async def run(args: argparse.Namespace) -> int:
     port = free_port()
     profile = tempfile.mkdtemp(prefix="ppr_probe_profile_")
@@ -156,6 +173,8 @@ async def run(args: argparse.Namespace) -> int:
                 if state and state.get("err"):
                     error_detail = state["err"]
                     break
+                # 首页先过昵称门再进单人局（只在还没进游戏时点）
+                await cdp.eval_js(ENTER_SOLO_JS)
                 await asyncio.sleep(0.5)
 
             if not ready:
