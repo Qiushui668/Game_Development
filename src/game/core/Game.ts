@@ -14,6 +14,7 @@ import { FollowCamera } from '@/game/actor/FollowCamera'
 import { percentile } from '@/game/utils/MathUtils'
 import { Music } from '@/game/audio/Music'
 import { QuizSystem, QUIZ_GATES, type QuizPhase } from '@/game/quiz/QuizSystem'
+import { AttackSystem, HitTracker, type AttackKind } from '@/game/combat/AttackSystem'
 
 export interface PerfSnapshot {
   fps: number
@@ -92,6 +93,10 @@ export class Game {
 
   /** 答题玩法（抽题 / 冻结 / 已解开的墙） */
   private readonly quiz = new QuizSystem()
+  /** 出招状态机（轻击 / 重击） */
+  private readonly attack = new AttackSystem()
+  /** 单机阶段没有敌人：先用一个纯规则靶子承接命中，联机时换成对目标玩家的判定 */
+  private readonly practiceTarget = new HitTracker()
 
   private readonly frameTimes: number[] = []
   private readonly race = new RaceStateMachine()
@@ -235,6 +240,15 @@ export class Game {
             for (let i = 0; i < QUIZ_GATES.length; i++) this.world?.openQuizGate(i)
           },
           getMusic: () => this.music?.snapshot() ?? null,
+          /** 自动化验收用：出招（'light' | 'heavy'），返回是否真的起手 */
+          attack: (kind: AttackKind) => this.tryAttack(kind),
+          /** 自动化验收用：读攻击状态机 + 手臂角度（验证姿态真的动了） */
+          getAttack: () => ({
+            ...this.attack.snapshot(),
+            armX: this.jelly ? this.jelly.armAngles() : null,
+          }),
+          /** 自动化验收用：读命中规则靶子的累计状态 */
+          getCombat: () => this.practiceTarget.snapshot(),
           /** 自动化验收用：跳过 3 秒倒数，直接进入 Racing */
           startNow: () => {
             if (this.race.state === 'Countdown') {
@@ -272,6 +286,8 @@ export class Game {
   restart(): void {
     if (this.race.state !== 'Result') return
     this.quiz.reset()
+    this.attack.reset()
+    this.practiceTarget.reset()
     this.world?.resetQuizGates()
     this.music?.duck(false)
     this.input?.setClickLock(true)
@@ -290,6 +306,23 @@ export class Game {
     this.input?.exitLock()
     this.input?.setClickLock(false)
     this.music?.duck(true)
+  }
+
+  /**
+   * 出招：只有 Racing 且上一招已经收完才起手。
+   * 出招不锁移动 —— 边跑边打，符合派对跑酷的操作手感。
+   */
+  tryAttack(kind: AttackKind): boolean {
+    if (this.race.state !== 'Racing') return false
+    if (!this.attack.start(kind)) return false
+    this.jelly?.playAttack(kind, this.attack.side)
+    return true
+  }
+
+  /** 命中帧：闪冲击环；命中判定先记在规则靶子上（联机时改为对目标玩家） */
+  private onAttackHit(kind: AttackKind): void {
+    this.jelly?.impact(kind)
+    this.practiceTarget.apply(kind)
   }
 
   /** UI / 调试作答；返回是否答对。答对即拆墙并恢复比赛 */
@@ -431,6 +464,11 @@ export class Game {
     // 答题冻结读秒独立推进：Paused 期间也要走完 3 s 才换题
     this.quiz.tick(h)
 
+    // 攻击状态机每步都走：出招动画要播完，命中帧在这里派发
+    this.practiceTarget.tick(h)
+    const hitKind = this.attack.tick(h)
+    if (hitKind) this.onAttackHit(hitKind)
+
     if (state === 'Countdown') {
       this.countdownLeft -= h
       if (this.countdownLeft <= 0) {
@@ -454,6 +492,9 @@ export class Game {
         axes = this.input.readAxes()
         jump = this.input.consumeJump()
       }
+      // 鼠标左键 / 右键：轻击 / 重击（只有指针锁定时才会入队）
+      const atk = this.input ? this.input.consumeAttack() : null
+      if (atk) this.tryAttack(atk)
       // 墙前按 F 开答（读的是本步之前的位置，够用：墙前 6 m 都能触发）
       if (this.quiz.phase === 'off') {
         const gate = this.quiz.gateInReach(player.read().z)
@@ -466,6 +507,7 @@ export class Game {
       this.quizRequested = false
       this.input?.consumeJump()
       this.input?.consumeInteract()
+      this.input?.consumeAttack()
     }
 
     player.prepare(h, { ...axes, jump, yaw: this.followCam?.yaw ?? 0 })

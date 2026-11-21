@@ -54,15 +54,16 @@ Game_Development/
 │  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）
 │  │  ├─ physics/ ObstacleField（障碍布局 + 命中判定，纯 TS，服务端可复用）
 │  │  ├─ quiz/   QuizSystem（墙位 / 抽题 / 冻结读秒，纯 TS，服务端可复用）
+│  │  ├─ combat/ AttackSystem（出招状态机 + 轻击 3 次/重击 1 次击倒规则，纯 TS，服务端可复用）
 │  │  ├─ audio/  Music（单条 audio 循环 + 答题 duck）
 │  │  ├─ data/   questions.ts（由 `tools/build_questions.py` 从 Excel 生成，勿手改）
-│  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃/F 边沿触发）
+│  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃/F/左右键攻击的边沿触发）
 │  │  └─ utils/  MathUtils
 │  └─ types/     network.ts（协议冻结）
 ├─ public/audio/ danzai.mp3（背景音乐）
 ├─ backend/      阶段 B 的 Python 服务端
 ├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
-├─ tools/        perf_probe.py（性能/截图探针）/ verify_m2.py（手感 8 项）/ verify_m3.py（击退 5 项）/ verify_m4.py（音乐 + 答题 12 项）/ build_questions.py（Excel → TS）
+├─ tools/        perf_probe.py（性能/截图探针）/ verify_m2.py（手感 8 项）/ verify_m3.py（击退 5 项）/ verify_m4.py（音乐 + 答题 12 项）/ verify_m5.py（攻击 9 项）/ build_questions.py（Excel → TS）
 └─ .venv/
 ```
 
@@ -106,6 +107,10 @@ Game_Development/
 | 答题时鼠标点不了选项 | Pointer Lock 期间光标不可见 | 进答题先 `Input.exitLock()`，答对后在点击事件里 `requestLock()` 恢复视角 |
 | 跳上护栏从墙侧绕过答题墙 | 护栏只有 1 m 高（跳高 1.88 m），墙宽只到赛道边（17.6 m），护栏顶（x≈±9.25）在墙碰撞体之外 | 画面墙宽改为 `(9 + 0.5 + 0.6) × 2 = 20.2 m`、高 4.6 m（盖住护栏）；**碰撞体单独加宽到 32 m**，堵住"斜跳出赛道再从墙后落回"的空中绕过路线 |
 | 答题期间比赛计时是否停 | 若停表，冻结 3 s 就没有惩罚 | `Paused` 也累加 `raceTimeMs`；同时冻结世界（障碍角度不推进） |
+| 攻击抬手看起来像"侧平举" | 手臂静息角是 128° 斜下外张，只绕 X 轴转时手臂始终横向，抬不到头上 | 攻击姿态拆成两段：绕 Z 收臂（左臂负、右臂正，符号写反会直接埋进身体）+ 绕 X 前挥；抬臂时手臂整体拉长 1.15–1.35 倍，短手才能探出圆身体 |
+| 重击举臂时手臂"消失" | 肩关节在 x=±0.46，落在半径 0.6 的椭球体内，原长 0.62 的手举到竖直整只被身体吞掉 | 同上的拉长 + 只举到 50° 斜上方；判定仍按 1 s 举臂、1.0 s 命中 |
+| 右键弹浏览器菜单 | `contextmenu` 默认行为 | 画布上 `contextmenu.preventDefault()`；未 Pointer Lock 时左右键不当作攻击，避免开局第一下就出招 |
+| 冲击环在青粉棋盘上看不见 | 环色取了同色系（青/粉） | 单开 `COLORS.impactLight`（冷白）与 `impactHeavy`（暖黄） |
 
 ## 6. Git
 

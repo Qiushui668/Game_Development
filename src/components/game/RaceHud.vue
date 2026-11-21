@@ -34,6 +34,13 @@ const remaining = computed(() => Math.round(props.race?.remaining ?? 0))
       <div class="bar"><div class="fill" :style="{ width: progressPct }" /></div>
     </div>
 
+    <!-- 操作提示：只在对局中显示，结算面板会盖住 -->
+    <div v-if="state === 'Racing'" class="controls">
+      <span class="key">左键</span>轻击
+      <span class="sep">·</span>
+      <span class="key">右键</span>重击
+    </div>
+
     <!-- 起跑倒数 -->
     <div v-if="showCountdown" class="countdown">
       <div class="digit">{{ countdownText }}</div>
@@ -100,6 +107,33 @@ const remaining = computed(() => Math.round(props.race?.remaining ?? 0))
   border-radius: 999px;
   background: linear-gradient(90deg, #2fe6dd, #ff7fc8);
   transition: width 0.2s linear;
+}
+
+.controls {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(12, 26, 42, 0.55);
+  font-size: 13px;
+  font-weight: 600;
+  color: #eaf7ff;
+  opacity: 0.9;
+}
+
+.controls .key {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.16);
+  font-weight: 800;
+}
+
+.controls .sep {
+  margin: 0 6px;
+  opacity: 0.5;
 }
 
 .countdown {

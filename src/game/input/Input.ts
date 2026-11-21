@@ -1,11 +1,14 @@
 /**
- * 输入：键盘 + 鼠标视角（Pointer Lock）。
+ * 输入：键盘 + 鼠标视角（Pointer Lock）+ 鼠标左右键出招。
  * 每帧只被消费一次，状态由控制器在固定步里读取。
  */
+import type { AttackKind } from '@/game/combat/AttackSystem'
+
 export class Input {
   private readonly keys = new Set<string>()
   private jumpQueued = false
   private interactQueued = false
+  private attackQueued: AttackKind | null = null
   private lookX = 0
   private lookY = 0
   private locked = false
@@ -20,6 +23,8 @@ export class Input {
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
     canvas.addEventListener('click', this.onClick)
+    canvas.addEventListener('mousedown', this.onMouseDown)
+    canvas.addEventListener('contextmenu', this.onContextMenu)
     document.addEventListener('pointerlockchange', this.onPointerLockChange)
     document.addEventListener('mousemove', this.onMouseMove)
     window.addEventListener('blur', this.onBlur)
@@ -58,6 +63,13 @@ export class Input {
     return queued
   }
 
+  /** 鼠标左/右键：轻击 / 重击，边沿触发，取出即清空 */
+  consumeAttack(): AttackKind | null {
+    const queued = this.attackQueued
+    this.attackQueued = null
+    return queued
+  }
+
   /** 答题时释放鼠标，让指针能点选项 */
   exitLock(): void {
     if (this.locked) document.exitPointerLock()
@@ -79,11 +91,14 @@ export class Input {
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
     this.canvas.removeEventListener('click', this.onClick)
+    this.canvas.removeEventListener('mousedown', this.onMouseDown)
+    this.canvas.removeEventListener('contextmenu', this.onContextMenu)
     document.removeEventListener('pointerlockchange', this.onPointerLockChange)
     document.removeEventListener('mousemove', this.onMouseMove)
     window.removeEventListener('blur', this.onBlur)
     if (this.locked) document.exitPointerLock()
     this.keys.clear()
+    this.attackQueued = null
   }
 
   private has(key: string): boolean {
@@ -113,6 +128,22 @@ export class Input {
   private readonly onClick = (): void => {
     if (!this.clickLock || this.locked) return
     void this.canvas.requestPointerLock()
+  }
+
+  /**
+   * 锁住指针后才算"在游戏里"，此时左键=轻击、右键=重击。
+   * 未锁定时左键仍走 onClick 的进入游戏逻辑，避免开局第一下就挥拳。
+   */
+  private readonly onMouseDown = (e: MouseEvent): void => {
+    if (!this.locked) return
+    if (e.button === 0) this.attackQueued = 'light'
+    else if (e.button === 2) this.attackQueued = 'heavy'
+    else return
+    e.preventDefault()
+  }
+
+  private readonly onContextMenu = (e: MouseEvent): void => {
+    e.preventDefault()
   }
 
   private readonly onPointerLockChange = (): void => {

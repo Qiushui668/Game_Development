@@ -151,6 +151,10 @@ export const COLORS = {
   jellyBody: 0x2fe0d6,
   jellyFace: 0xfdf3e6,
   jellyEye: 0x10242c,
+
+  /** 攻击命中冲击环：浅击偏冷白、重击偏暖黄，都要在青粉棋盘上跳出来 */
+  impactLight: 0xf4ffff,
+  impactHeavy: 0xffd84d,
 } as const
 
 /** 起点人群的果冻小人配色 */

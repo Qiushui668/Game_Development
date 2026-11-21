@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { COLORS } from '@/game/core/GameConfig'
 import { clamp, damp } from '@/game/utils/MathUtils'
+import { ATTACK_TIMING, type AttackKind } from '@/game/combat/AttackSystem'
 import type { PlayerState } from '@/game/actor/PlayerController'
 
 type Vec3 = [number, number, number]
@@ -34,6 +35,115 @@ const SHOULDER_X = 0.46
 const HIP_Y = 0.36
 const HIP_X = 0.2
 
+interface AttackPose {
+  leftX: number
+  leftZ: number
+  rightX: number
+  rightZ: number
+  /** 躯干附加前倾（负 = 向前） */
+  lean: number
+  /** 躯干扭转（让身子跟着出拳方向拧一下） */
+  twist: number
+}
+
+function easeOut(q: number): number {
+  return 1 - (1 - q) * (1 - q)
+}
+
+/**
+ * 手臂的"抬起"角：绕 Z 转到 ± 这个值，短手臂就贴着身体竖到头上；
+ * 再配合出招时把手臂整体放长（见 update 里的 grow），手才能探出圆身体看得见。
+ */
+const ARM_UP_Z = 1.6
+
+/**
+ * 攻击姿态。手臂静息角是"斜下外张 128°"，所以纯绕 X 前后抡只会看起来像侧平举。
+ * 这里拆成两段：先绕 Z 把手臂收到头侧（ARM_UP_Z），再绕 X 向前挥，
+ * 轻击 = 单手 jab（0.36 s）；重击 = 双臂举过头顶 1 s 后砸下（1.55 s 收完）。
+ * 返回 null 表示这一招已经结束。
+ */
+function attackPose(kind: AttackKind, t: number, side: number): AttackPose | null {
+  if (kind === 'light') {
+    const spec = ATTACK_TIMING.light
+    if (t >= spec.duration) return null
+    // 抬起：0 → 0.08 s 收到头侧；收招阶段再落回身侧
+    let lift: number
+    if (t < 0.08) lift = t / 0.08
+    else if (t < spec.strikeEnd) lift = 1
+    else lift = Math.max(0, 1 - (t - spec.strikeEnd) / (spec.duration - spec.strikeEnd))
+    // 挥动：后拉 -0.45 → 前刺 +1.55 → 归位
+    let swing: number
+    if (t < spec.windupEnd) {
+      swing = -0.45 * (t / spec.windupEnd)
+    } else if (t < spec.strikeEnd) {
+      const q = easeOut((t - spec.windupEnd) / (spec.strikeEnd - spec.windupEnd))
+      swing = -0.45 + 2.0 * q
+    } else {
+      const q = (t - spec.strikeEnd) / (spec.duration - spec.strikeEnd)
+      swing = 1.55 * (1 - q)
+    }
+    // 非挥动臂往回收一点、往身体内侧夹，避免两只手一起外张看起来像"飞机"
+    const otherX = -0.35 * lift
+    const otherZ = 0.3 * lift
+    // 身体朝出拳方向拧：正拳打在右边，上身就偏右，动作才对得上
+    const twist = -side * 0.32 * lift
+    return side < 0
+      ? {
+          leftX: swing,
+          leftZ: -ARM_UP_Z * lift,
+          rightX: otherX,
+          rightZ: otherZ,
+          lean: Math.max(0, swing) * 0.12,
+          twist,
+        }
+      : {
+          leftX: otherX,
+          leftZ: -otherZ,
+          rightX: swing,
+          rightZ: ARM_UP_Z * lift,
+          lean: Math.max(0, swing) * 0.12,
+          twist,
+        }
+  }
+
+  const spec = ATTACK_TIMING.heavy
+  if (t >= spec.duration) return null
+  if (t < spec.windupEnd) {
+    // 举臂：0 → 0.85 s 举到斜上方（先快后慢），再保持到 1.0 s 砸下
+    const q = easeOut(clamp(t / 0.85, 0, 1))
+    return {
+      leftX: 0.3 * q,
+      leftZ: -ARM_UP_Z * q,
+      rightX: 0.3 * q,
+      rightZ: ARM_UP_Z * q,
+      lean: 0.13 * q,
+      twist: 0,
+    }
+  }
+  if (t < spec.strikeEnd) {
+    // 砸下：0.16 s 内从斜上方砸到身前
+    const q = Math.pow((t - spec.windupEnd) / (spec.strikeEnd - spec.windupEnd), 0.55)
+    return {
+      leftX: 0.3 + 1.62 * q,
+      leftZ: -ARM_UP_Z,
+      rightX: 0.3 + 1.62 * q,
+      rightZ: ARM_UP_Z,
+      lean: 0.13 - 0.45 * q,
+      twist: 0,
+    }
+  }
+  const q = (t - spec.strikeEnd) / (spec.duration - spec.strikeEnd)
+  const k = 1 - q
+  return {
+    leftX: 1.92 * k,
+    leftZ: -ARM_UP_Z * k,
+    rightX: 1.92 * k,
+    rightZ: ARM_UP_Z * k,
+    lean: -0.32 * k,
+    twist: 0,
+  }
+}
+
 export interface JellyBeanOptions {
   /** 身体主色；联机阶段按玩家分配 */
   color?: number
@@ -63,6 +173,16 @@ export class JellyBean {
   private squash = 0
   private airBlend = 0
 
+  /** 攻击动画：-1 表示没在出招 */
+  private attackKind: AttackKind | null = null
+  private attackT = 0
+  private attackSide = 1
+  /** 命中冲击环 */
+  private impactMesh: THREE.Mesh | null = null
+  private impactMat: THREE.MeshBasicMaterial | null = null
+  private impactT = 1
+  private impactMax = 1.6
+
   constructor(opts: JellyBeanOptions = {}) {
     this.bodyMat = new THREE.MeshLambertMaterial({ color: opts.color ?? COLORS.jellyBody })
     // 脸加一点自发光：背光时也能保住奶油色，避免转到阴面就发灰（Lambert 支持 emissive）
@@ -91,7 +211,34 @@ export class JellyBean {
 
     this.group.name = 'JellyBean'
     this.group.add(this.torso, this.armL, this.armR, this.legL, this.legR, this.buildShadow())
+    const impact = this.buildImpact()
+    this.impactMesh = impact
+    this.group.add(impact)
     if (opts.scale !== undefined) this.group.scale.setScalar(opts.scale)
+  }
+
+  /** 出招：由攻击状态机在起手时调用（side 用于轻击左右手交替） */
+  playAttack(kind: AttackKind, side = 1): void {
+    this.attackKind = kind
+    this.attackT = 0
+    this.attackSide = side
+  }
+
+  /** 命中帧：角色身前闪一圈冲击环（重击更大） */
+  impact(kind: AttackKind): void {
+    this.impactT = 0
+    this.impactMax = kind === 'heavy' ? 2.3 : 1.35
+    this.impactMat?.color.setHex(kind === 'heavy' ? COLORS.impactHeavy : COLORS.impactLight)
+  }
+
+  /** 调试用：左右臂当前的 X/Z 角度（弧度） */
+  armAngles(): { leftX: number; rightX: number; leftZ: number; rightZ: number } {
+    return {
+      leftX: this.armL.rotation.x,
+      rightX: this.armR.rotation.x,
+      leftZ: this.armL.rotation.z,
+      rightZ: this.armR.rotation.z,
+    }
   }
 
   /** 换色不重建几何，供联机阶段区分玩家 */
@@ -135,6 +282,43 @@ export class JellyBean {
     this.torso.position.y = bob + breathe
     this.torso.rotation.x = -0.17 * runAmp
 
+    // 攻击姿态覆盖手臂摆动：出招时手臂只走攻击曲线，避免和跑步摆臂打架
+    if (this.attackKind) {
+      this.attackT += dt
+      const pose = attackPose(this.attackKind, this.attackT, this.attackSide)
+      if (!pose) {
+        this.attackKind = null
+        this.armL.scale.setScalar(1)
+        this.armR.scale.setScalar(1)
+        this.torso.rotation.y = 0
+      } else {
+        this.armL.rotation.x = pose.leftX
+        this.armL.rotation.z = pose.leftZ
+        this.armR.rotation.x = pose.rightX
+        this.armR.rotation.z = pose.rightZ
+        this.torso.rotation.x += pose.lean
+        this.torso.rotation.y = pose.twist
+        // 抬臂时手臂跟着拉长一点：圆身体太胖，原长的手会整只埋进去看不见
+        const lift = Math.min(1, Math.abs(pose.leftZ) / ARM_UP_Z)
+        const grow = 1 + (this.attackKind === 'heavy' ? 0.35 : 0.15) * lift
+        this.armL.scale.setScalar(grow)
+        this.armR.scale.setScalar(grow)
+      }
+    }
+
+    // 冲击环：命中后 0.26 s 内放大淡出
+    if (this.impactMesh && this.impactMat) {
+      if (this.impactT < 1) {
+        this.impactT = Math.min(1, this.impactT + dt / 0.26)
+        const s = 0.55 + this.impactMax * 0.55 * this.impactT
+        this.impactMesh.scale.set(s, 1, s)
+        this.impactMesh.visible = true
+        this.impactMat.opacity = 0.85 * (1 - this.impactT)
+      } else if (this.impactMesh.visible) {
+        this.impactMesh.visible = false
+      }
+    }
+
     const sy = 1 - this.squash
     const sxz = 1 + this.squash * 0.55
     this.torso.scale.set(sxz, sy, sxz)
@@ -153,6 +337,7 @@ export class JellyBean {
     this.faceMat.dispose()
     this.eyeMat.dispose()
     this.shadowMat.dispose()
+    this.impactMat?.dispose()
   }
 
   /** 身体椭球（不含四肢） */
@@ -231,6 +416,24 @@ export class JellyBean {
     xform(foot, [0, -0.18, 0.1], [0, 0, 0], [1.05, 0.9, 1.2])
     const mesh = new THREE.Mesh(foot, this.bodyMat)
     mesh.name = side < 0 ? 'JellyLegL' : 'JellyLegR'
+    return mesh
+  }
+
+  /** 命中冲击环：贴地、放在身前，按攻击类型换色 */
+  private buildImpact(): THREE.Mesh {
+    const geo = new THREE.RingGeometry(0.3, 0.46, 24)
+    geo.rotateX(-Math.PI / 2)
+    geo.translate(0, 0.02, 0.85)
+    this.impactMat = new THREE.MeshBasicMaterial({
+      color: COLORS.impactLight,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+    const mesh = new THREE.Mesh(geo, this.impactMat)
+    mesh.name = 'JellyImpact'
+    mesh.visible = false
     return mesh
   }
 
