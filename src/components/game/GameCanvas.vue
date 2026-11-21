@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
-import { Game, type PerfSnapshot } from '@/game/core/Game'
+import { Game, type PerfSnapshot, type RaceSnapshot } from '@/game/core/Game'
 import DebugOverlay from '@/components/game/DebugOverlay.vue'
+import RaceHud from '@/components/game/RaceHud.vue'
 
 const host = ref<HTMLElement | null>(null)
 const stats = shallowRef<PerfSnapshot | null>(null)
+const race = shallowRef<RaceSnapshot | null>(null)
 const error = ref<string | null>(null)
 
 let game: Game | null = null
 let timer = 0
+let raceTimer = 0
 
 onMounted(async () => {
   if (!host.value) return
@@ -21,13 +24,22 @@ onMounted(async () => {
     timer = window.setInterval(() => {
       stats.value = instance.getPerf()
     }, 250)
+    // 计时器要看起来连续，单独 10 Hz 拉取
+    raceTimer = window.setInterval(() => {
+      race.value = instance.getRace()
+    }, 100)
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   }
 })
 
+function restartRace(): void {
+  game?.restart()
+}
+
 onBeforeUnmount(() => {
   window.clearInterval(timer)
+  window.clearInterval(raceTimer)
   game?.dispose()
   game = null
 })
@@ -36,6 +48,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="canvas-host" ref="host">
     <div v-if="error" class="error">初始化失败：{{ error }}</div>
+    <RaceHud :race="race" @restart="restartRace" />
     <DebugOverlay :stats="stats" />
   </div>
 </template>

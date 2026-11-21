@@ -42,6 +42,8 @@ export const TRACK = {
   railWidth: 0.5,
   startPlatformLength: 15,
   finishPlatformLength: 6,
+  /** 终点线之后的缓冲区长度，避免冲线后立刻掉进虚空 */
+  runoff: 12,
 } as const
 
 /** 障碍（扫地杆 / 滚轴）的判定与击退参数 */

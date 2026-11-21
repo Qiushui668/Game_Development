@@ -49,6 +49,7 @@ export class GameWorld {
       this.buildHurdles(),
       this.buildPins(),
       this.buildRamp(),
+      this.buildFinishGate(),
       this.buildCrown(),
     )
     this.buildSpinners()
@@ -119,8 +120,9 @@ export class GameWorld {
   private buildFloors(): THREE.Group {
     const mats = getMaterials()
     const apronLen = 20
-    const trackLen = TRACK.length + apronLen
-    const trackCenter = -(TRACK.length - apronLen) / 2
+    // 主体地面一直铺到终点线之后 runoff 米，冲线急停时脚下始终有地
+    const trackLen = TRACK.length + apronLen + TRACK.runoff
+    const trackCenter = (apronLen - (TRACK.length + TRACK.runoff)) / 2
 
     const group = new THREE.Group()
     group.name = 'Floors'
@@ -137,10 +139,10 @@ export class GameWorld {
   private buildRails(): THREE.Mesh {
     const geos: THREE.BufferGeometry[] = []
     const x = TRACK.width / 2 + TRACK.railWidth / 2
-    const totalLen = TRACK.length + 20
+    const totalLen = TRACK.length + 20 + TRACK.runoff
     for (const side of [-1, 1]) {
       const g = new THREE.BoxGeometry(TRACK.railWidth, TRACK.railHeight, totalLen)
-      g.translate(side * x, TRACK.railHeight / 2, -(TRACK.length - 20) / 2)
+      g.translate(side * x, TRACK.railHeight / 2, (20 - (TRACK.length + TRACK.runoff)) / 2)
       geos.push(g)
     }
     const merged = mergeGeometries(geos, false)
@@ -214,6 +216,35 @@ export class GameWorld {
     }
   }
 
+  /** 终点拱门：立柱 + 条纹横梁，让冲线后看到的是"门"而不是虚空（2 个 draw call） */
+  private buildFinishGate(): THREE.Group {
+    const z = -(TRACK.length + 4)
+    const group = new THREE.Group()
+    group.name = 'FinishGate'
+
+    const pillarGeos: THREE.BufferGeometry[] = []
+    // 横梁抬到 10.5 m 以上，让皇冠完整落在门洞里而不是被梁切掉
+    const pillarH = 10.5
+    for (const side of [-1, 1]) {
+      const g = new THREE.BoxGeometry(0.9, pillarH, 0.9)
+      g.translate(side * (TRACK.width / 2 - 0.2), pillarH / 2, z)
+      pillarGeos.push(g)
+    }
+    const pillars = mergeGeometries(pillarGeos, false)
+    pillarGeos.forEach((g) => g.dispose())
+    const pillarMesh = new THREE.Mesh(pillars, getMaterials().rail)
+    pillarMesh.matrixAutoUpdate = false
+    group.add(pillarMesh)
+
+    const beam = new THREE.BoxGeometry(TRACK.width + 1.4, 1.2, 0.9)
+    beam.translate(0, pillarH + 0.6, z)
+    const beamMesh = new THREE.Mesh(beam, getMaterials().hurdle)
+    beamMesh.matrixAutoUpdate = false
+    group.add(beamMesh)
+
+    return group
+  }
+
   /** 终点皇冠，合并成 1 个 draw call */
   private buildCrown(): THREE.Mesh {
     const geos: THREE.BufferGeometry[] = []
@@ -261,12 +292,12 @@ export class GameWorld {
       .setTranslation(0, RAMP_Y, RAMP_Z)
       .setRotation(rampQuat)
     this.physics.createCollider(ramp)
-    const groundHalfLen = (TRACK.length + 20) / 2
+    const groundHalfLen = (TRACK.length + 20 + TRACK.runoff) / 2
     const ground = RAPIER.ColliderDesc.cuboid(
       TRACK.width / 2,
       TRACK.groundThickness / 2,
       groundHalfLen,
-    ).setTranslation(0, -TRACK.groundThickness / 2, -(TRACK.length - 20) / 2)
+    ).setTranslation(0, -TRACK.groundThickness / 2, (20 - (TRACK.length + TRACK.runoff)) / 2)
     this.physics.createCollider(ground)
 
     const apron = RAPIER.ColliderDesc.cuboid(
@@ -277,10 +308,10 @@ export class GameWorld {
     this.physics.createCollider(apron)
 
     const railX = TRACK.width / 2 + TRACK.railWidth / 2
-    const railHalfLen = (TRACK.length + 20) / 2
+    const railHalfLen = (TRACK.length + 20 + TRACK.runoff) / 2
     for (const side of [-1, 1]) {
       const rail = RAPIER.ColliderDesc.cuboid(TRACK.railWidth / 2, TRACK.railHeight / 2, railHalfLen)
-        .setTranslation(side * railX, TRACK.railHeight / 2, -(TRACK.length - 20) / 2)
+        .setTranslation(side * railX, TRACK.railHeight / 2, (20 - (TRACK.length + TRACK.runoff)) / 2)
       this.physics.createCollider(rail)
     }
 

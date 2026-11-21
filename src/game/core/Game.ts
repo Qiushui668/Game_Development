@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import { MATCH, PHYSICS, TRACK } from '@/game/core/GameConfig'
 import { GameLoop } from '@/game/core/GameLoop'
+import { RaceStateMachine, type RaceState } from '@/game/core/GameState'
 import { SceneManager } from '@/game/scene/SceneManager'
 import { Lighting } from '@/game/scene/Lighting'
 import { Environment } from '@/game/scene/Environment'
@@ -25,7 +26,28 @@ export interface PerfSnapshot {
   stunned: boolean
 }
 
+/** 比赛快照：HUD 以 10 Hz 拉取，避免每帧写响应式 */
+export interface RaceSnapshot {
+  state: RaceState
+  /** 倒计时剩余秒（仅 Countdown 有效） */
+  countdown: number
+  /** 当前计时（毫秒）；完赛后停在成绩 */
+  elapsedMs: number
+  /** 已跑进度的 0..1 */
+  progress: number
+  /** 剩余距离（米） */
+  remaining: number
+  /** 本局成绩，未完赛为 null */
+  finishMs: number | null
+  /** 本次会话最好成绩 */
+  bestMs: number | null
+}
+
 const FRAME_WINDOW = 300
+/** 起跑倒数秒数 */
+const COUNTDOWN_SECONDS = 3
+/** 完赛到弹结算面板的停顿，让玩家看清终点 */
+const RESULT_DELAY = 0.9
 
 /**
  * 游戏总装配：渲染器 / 灯光 / 环境 / 物理世界 / 玩家 / 帧循环。
@@ -44,6 +66,15 @@ export class Game {
   private followCam: FollowCamera | null = null
 
   private readonly frameTimes: number[] = []
+  private readonly race = new RaceStateMachine()
+  private raceTimeMs = 0
+  private countdownLeft = COUNTDOWN_SECONDS
+  private finishMs: number | null = null
+  private bestMs: number | null = null
+  private resultDelay = 0
+  private spawnX = 0
+  private spawnY = 0.35
+  private spawnZ = MATCH.spawnZ
   private ready = false
   private disposed = false
 
@@ -72,6 +103,9 @@ export class Game {
 
     // 玩家：脚底从 0.35 m 落下，避免第一帧就卡在地面里
     const spawn = { x: 0, y: 0.35, z: MATCH.spawnZ }
+    this.spawnX = spawn.x
+    this.spawnY = spawn.y
+    this.spawnZ = spawn.z
     const player = new PlayerController(physics, spawn)
     const jelly = new JellyBean()
     jelly.group.position.set(spawn.x, spawn.y, spawn.z)
@@ -84,6 +118,7 @@ export class Game {
 
     this.loop = new GameLoop(PHYSICS.fixedStep, PHYSICS.maxSubSteps, this.onFixedUpdate, this.onRender)
     this.ready = true
+    this.startCountdown()
 
     if (import.meta.env.DEV) {
       Object.assign(window, {
@@ -127,6 +162,17 @@ export class Game {
                 }
               : null,
           getTrack: () => ({ length: TRACK.length, finishZ: TRACK.finishZ, spawnZ: MATCH.spawnZ }),
+          getRace: () => this.getRace(),
+          /** 自动化验收用：跳过 3 秒倒数，直接进入 Racing */
+          startNow: () => {
+            if (this.race.state === 'Countdown') {
+              this.countdownLeft = 0
+              this.race.set('Racing')
+              this.raceTimeMs = 0
+            }
+          },
+          /** 自动化验收用：结算面板出现后重开一局 */
+          restartRace: () => this.restart(),
         },
       })
     }
@@ -138,6 +184,42 @@ export class Game {
 
   stop(): void {
     this.loop?.stop()
+  }
+
+  /** 进入下一轮的起跑倒数：Menu/Result → Loading → Countdown */
+  private startCountdown(): void {
+    if (this.race.state === 'Menu' || this.race.state === 'Result') this.race.set('Loading')
+    if (this.race.state === 'Loading') this.race.set('Countdown')
+    this.raceTimeMs = 0
+    this.finishMs = null
+    this.resultDelay = 0
+    this.countdownLeft = COUNTDOWN_SECONDS
+  }
+
+  /** 重新开一局：复位角色、障碍角度与计时 */
+  restart(): void {
+    if (this.race.state !== 'Result') return
+    this.player?.teleport(this.spawnX, this.spawnY, this.spawnZ)
+    this.followCam?.snap()
+    this.world?.obstacles.reset()
+    this.startCountdown()
+  }
+
+  /** 供 HUD 以 10 Hz 拉取的比赛快照 */
+  getRace(): RaceSnapshot {
+    const st = this.player?.read()
+    const z = st?.z ?? this.spawnZ
+    const total = Math.abs(this.spawnZ - TRACK.finishZ)
+    const done = Math.max(0, this.spawnZ - z)
+    return {
+      state: this.race.state,
+      countdown: Math.max(0, this.countdownLeft),
+      elapsedMs: this.finishMs ?? this.raceTimeMs,
+      progress: Math.min(1, done / total),
+      remaining: Math.max(0, z - TRACK.finishZ),
+      finishMs: this.finishMs,
+      bestMs: this.bestMs,
+    }
   }
 
   /** 供 HUD / DebugOverlay 以低频拉取的性能快照 */
@@ -206,21 +288,37 @@ export class Game {
   private debugAxes: { x: number; y: number; sprint: boolean } | null = null
   private debugJump = false
 
-  /** 固定物理步：算意图 → 步进物理 → 结算 → 装饰动画 */
+  /** 固定物理步：算意图 → 步进物理 → 结算 → 障碍判定 → 比赛状态 */
   private readonly onFixedUpdate = (h: number): void => {
     const physics = this.physics
     const player = this.player
     if (!physics || !player) return
 
+    const state = this.race.state
+    if (state === 'Countdown') {
+      this.countdownLeft -= h
+      if (this.countdownLeft <= 0) {
+        this.countdownLeft = 0
+        this.race.set('Racing')
+        this.raceTimeMs = 0
+      }
+    }
+    if (state === 'Racing') this.raceTimeMs += h * 1000
+
     let axes = { x: 0, y: 0, sprint: false }
     let jump = false
-    if (this.debugAxes) {
-      axes = { x: this.debugAxes.x, y: this.debugAxes.y, sprint: this.debugAxes.sprint }
-      jump = this.debugJump
+    // 只有 Racing 才吃输入：倒数、完赛、结算阶段角色不动
+    if (this.race.state === 'Racing') {
+      if (this.debugAxes) {
+        axes = { x: this.debugAxes.x, y: this.debugAxes.y, sprint: this.debugAxes.sprint }
+        jump = this.debugJump
+        this.debugJump = false
+      } else if (this.input) {
+        axes = this.input.readAxes()
+        jump = this.input.consumeJump()
+      }
+    } else {
       this.debugJump = false
-    } else if (this.input) {
-      axes = this.input.readAxes()
-      jump = this.input.consumeJump()
     }
 
     player.prepare(h, { ...axes, jump, yaw: this.followCam?.yaw ?? 0 })
@@ -231,6 +329,20 @@ export class Game {
     const st = player.read()
     const hit = this.world?.obstacles.hit(st.x, st.y, st.z)
     if (hit) player.applyKnockback(hit)
+
+    // 终点：脚底越过 finishZ 即完赛，并急停，避免顺着速度冲下终点平台
+    if (this.race.state === 'Racing' && st.z <= TRACK.finishZ) {
+      this.finishMs = this.raceTimeMs
+      this.race.set('Finished')
+      this.resultDelay = 0
+      player.halt()
+      this.debugAxes = null
+      if (this.bestMs === null || this.finishMs < this.bestMs) this.bestMs = this.finishMs
+    }
+    if (this.race.state === 'Finished') {
+      this.resultDelay += h
+      if (this.resultDelay >= RESULT_DELAY) this.race.set('Result')
+    }
 
     this.world?.update(h)
   }

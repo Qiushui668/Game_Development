@@ -28,6 +28,9 @@ MEASURE_JS = r"""
   const P = window.__PPR;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const out = {};
+  // M3 加了 3 秒起跑倒数，验收直接跳过
+  if (P.startNow) P.startNow();
+  await sleep(150);
 
   // ---------- 1. 关卡长度 ----------
   const track = P.getTrack();
@@ -95,8 +98,54 @@ MEASURE_JS = r"""
     angleAdvanced: Math.abs(ob1.sweeperAngles[0] - ob0.sweeperAngles[0]),
   };
 
+  // ---------- 6. 冲线 → 结算态 ----------
+  async function runToFinish() {
+    P.releaseInput();
+    P.teleport(0, 0.1, -316);
+    await sleep(220);
+    P.stepInput(0, 1, false, true);
+    const t = performance.now();
+    while (performance.now() - t < 6000) {
+      if (P.getRace().state === 'Result') break;
+      await sleep(16);
+    }
+    P.releaseInput();
+    return P.getRace();
+  }
+
+  const firstFinish = await runToFinish();
+  out.finish = {
+    state: firstFinish.state,
+    finishMs: firstFinish.finishMs,
+    progress: firstFinish.progress,
+    remaining: firstFinish.remaining,
+  };
+
+  // ---------- 7. 重开一局：倒数 → Racing，计时归零 ----------
+  P.restartRace();
+  await sleep(180);
+  const afterRestart = P.getRace();
+  const playerAfterRestart = P.getPlayer();
+  out.restart = {
+    state: afterRestart.state,
+    countdown: afterRestart.countdown,
+    elapsedMs: afterRestart.elapsedMs,
+    playerZ: playerAfterRestart.z,
+    playerGroundedY: playerAfterRestart.y,
+  };
+
+  // ---------- 8. 第二局计时从 0 起算 ----------
+  if (P.startNow) P.startNow();
+  await sleep(150);
+  const secondFinish = await runToFinish();
+  out.secondRun = {
+    state: secondFinish.state,
+    finishMs: secondFinish.finishMs,
+    bestMs: secondFinish.bestMs,
+    elapsedAtFinish: secondFinish.elapsedMs,
+  };
+
   P.releaseInput();
-  P.teleport(0, 0.05, 3.5);
   return out;
 })()
 """

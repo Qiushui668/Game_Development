@@ -222,6 +222,15 @@ export class PlayerController {
     return this.stunT > 0
   }
 
+  /** 冲线后急停：不清垂直速度，让重力把人落到终点平台上，横速直接归零防止冲出赛道 */
+  halt(): void {
+    this.vx = 0
+    this.vz = 0
+    this.stunT = 0
+    this.hitCooldownT = 0
+    this.jumpBuffer = 0
+  }
+
   respawn(): void {
     this.teleport(this.spawn.x, this.spawn.y, this.spawn.z)
   }

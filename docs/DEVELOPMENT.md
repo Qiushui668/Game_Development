@@ -47,7 +47,7 @@ Game_Development/
 │  ├─ main.ts / App.vue
 │  ├─ views/GameView.vue
 │  ├─ styles/global.css
-│  ├─ components/game/   GameCanvas.vue / DebugOverlay.vue
+│  ├─ components/game/   GameCanvas.vue / DebugOverlay.vue / RaceHud.vue（计时·倒数·结算）
 │  ├─ game/
 │  │  ├─ core/   GameConfig / GameLoop / GameState / Game
 │  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World
@@ -93,6 +93,8 @@ Game_Development/
 | 障碍"看得见撞不到" | 扫地杆/滚轴只有视觉没有判定 | `ObstacleField` 与视觉共用同一份布局和角度，物理步后统一判定 |
 | 延长赛道后撞进山体 | 远山坐标写死，有一峰在 x=0/z=−285 | 山头按赛道长度生成，全部摆到 \|x\| ≥ 65 m |
 | 滚轴挡住整条路 | 顶面 1.7 m 高于跳高 1.8 m 的可用余量 | 半径 0.65 / 轴心 0.67，顶面 1.32 m，可跳可绕 |
+| 初始化白屏 `illegal race state transition` | 状态机只允许相邻转换 | `Menu → Loading → Countdown` 两步走，不能直跳 |
+| 完赛后人在起点 | 冲线时横速 10 m/s 冲出终点平台掉进虚空触发复活 | 冲线调 `PlayerController.halt()` 清横速 + 终点后铺 12 m 缓冲地 |
 
 ## 6. Git
 

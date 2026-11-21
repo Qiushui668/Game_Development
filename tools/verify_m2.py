@@ -25,6 +25,9 @@ MEASURE_JS = r"""
 (async () => {
   const P = window.__PPR;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // M3 起加了 3 秒起跑倒数，验收脚本直接跳过，避免 3 秒空等
+  if (P.startNow) P.startNow();
+  await sleep(120);
   const out = {};
 
   // ---------- 1. 前进速度 ----------

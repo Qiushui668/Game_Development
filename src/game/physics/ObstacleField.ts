@@ -107,6 +107,12 @@ export class ObstacleField {
     }
   }
 
+  /** 重开一局：角度回到初始相位，避免上一局残留位置 */
+  reset(): void {
+    for (let i = 0; i < SWEEPERS.length; i++) this.sweepAngles[i] = SWEEPERS[i].phase
+    for (let i = 0; i < ROLLERS.length; i++) this.rollAngles[i] = ROLLERS[i].phase
+  }
+
   /**
    * 胶囊是否撞到障碍。footY 为脚底高度。
    * 返回 null 表示没撞到。
