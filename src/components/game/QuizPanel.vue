@@ -19,6 +19,7 @@ const freezeRatio = computed(() => {
 })
 const labels = ['A', 'B', 'C', 'D']
 const picked = computed(() => props.quiz?.lastChoice ?? null)
+const interrupted = computed(() => props.quiz?.interrupted ?? false)
 </script>
 
 <template>
@@ -75,6 +76,12 @@ const picked = computed(() => props.quiz?.lastChoice ?? null)
     <div v-if="phase === 'correct'" class="correct">
       <div class="check">✓</div>
       <div class="correct-text">答对，通过！</div>
+    </div>
+
+    <!-- 被打倒：答题中断 -->
+    <div v-if="interrupted" class="interrupted">
+      <div class="hit-title">被击倒！</div>
+      <div class="hit-sub">答题中断 · 眩晕 1 秒后可按 F 重新作答</div>
     </div>
   </div>
 </template>
@@ -328,6 +335,55 @@ const picked = computed(() => props.quiz?.lastChoice ?? null)
   font-size: 18px;
   font-weight: 800;
   color: #eafffd;
+}
+
+/* 被打倒中断答题：只闪一下，不挡操作 */
+.interrupted {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+  animation: hitFlash 1.6s ease-out forwards;
+}
+
+.hit-title {
+  font-size: 64px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #fff;
+  text-shadow: 0 5px 0 #ff5fa8, 0 14px 30px rgba(10, 30, 50, 0.5);
+}
+
+.hit-sub {
+  padding: 7px 18px;
+  border-radius: 999px;
+  background: rgba(255, 95, 168, 0.24);
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffd9ea;
+}
+
+@keyframes hitFlash {
+  0% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
 }
 
 @keyframes pop {

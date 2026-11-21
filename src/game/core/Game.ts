@@ -14,7 +14,12 @@ import { FollowCamera } from '@/game/actor/FollowCamera'
 import { percentile } from '@/game/utils/MathUtils'
 import { Music } from '@/game/audio/Music'
 import { QuizSystem, QUIZ_GATES, type QuizPhase } from '@/game/quiz/QuizSystem'
-import { AttackSystem, HitTracker, type AttackKind } from '@/game/combat/AttackSystem'
+import {
+  AttackSystem,
+  COMBAT_RULES,
+  HitTracker,
+  type AttackKind,
+} from '@/game/combat/AttackSystem'
 
 export interface PerfSnapshot {
   fps: number
@@ -71,6 +76,8 @@ export interface QuizSnapshot {
   /** 站在墙前可按 F 时，返回墙号（1 起） */
   promptGate: number | null
   lastChoice: number | null
+  /** 答题被击倒打断时的短暂提示 */
+  interrupted: boolean
 }
 
 /**
@@ -97,6 +104,10 @@ export class Game {
   private readonly attack = new AttackSystem()
   /** 单机阶段没有敌人：先用一个纯规则靶子承接命中，联机时换成对目标玩家的判定 */
   private readonly practiceTarget = new HitTracker()
+  /** 自己被打中的计数（轻击 3 次 / 重击 1 次倒地），单机阶段由调试钩子触发 */
+  private readonly selfHits = new HitTracker()
+  /** 答题被打断后的提示剩余时间 */
+  private interruptFlashT = 0
 
   private readonly frameTimes: number[] = []
   private readonly race = new RaceStateMachine()
@@ -249,6 +260,9 @@ export class Game {
           }),
           /** 自动化验收用：读命中规则靶子的累计状态 */
           getCombat: () => this.practiceTarget.snapshot(),
+          /** 自动化验收用：模拟"被别的玩家打中"（联机前的规则验证入口） */
+          hitPlayer: (kind: AttackKind) => this.hitPlayer(kind),
+          getSelfHits: () => this.selfHits.snapshot(),
           /** 自动化验收用：跳过 3 秒倒数，直接进入 Racing */
           startNow: () => {
             if (this.race.state === 'Countdown') {
@@ -288,6 +302,8 @@ export class Game {
     this.quiz.reset()
     this.attack.reset()
     this.practiceTarget.reset()
+    this.selfHits.reset()
+    this.interruptFlashT = 0
     this.world?.resetQuizGates()
     this.music?.duck(false)
     this.input?.setClickLock(true)
@@ -325,6 +341,33 @@ export class Game {
     this.practiceTarget.apply(kind)
   }
 
+  /**
+   * 自己被别的玩家打中（单机阶段没有敌人，只有调试钩子调这个）。
+   * 轻击累计 3 次、重击 1 次 → 倒地眩晕 1 s；如果此时正在答题，答题直接作废。
+   */
+  hitPlayer(kind: AttackKind): { down: boolean; interrupted: boolean } {
+    const out = this.selfHits.apply(kind)
+    if (!out.knockdown) return { down: false, interrupted: false }
+    this.player?.applyStun(COMBAT_RULES.knockdownSeconds)
+    const interrupted = this.interruptQuiz()
+    return { down: true, interrupted }
+  }
+
+  /**
+   * 被打倒时中断答题：题作废、墙不拆、退回赛道。
+   * 玩家可以重新按 F 再答（会换一道新题）。
+   */
+  interruptQuiz(): boolean {
+    if (this.quiz.phase === 'off') return false
+    this.quiz.close()
+    this.music?.duck(false)
+    this.input?.setClickLock(true)
+    if (this.race.state === 'Paused') this.race.set('Racing')
+    this.input?.requestLock()
+    this.interruptFlashT = 1.6
+    return true
+  }
+
   /** UI / 调试作答；返回是否答对。答对即拆墙并恢复比赛 */
   answerQuiz(choice: number): boolean {
     if (this.quiz.phase !== 'asking' || this.quiz.activeGate === null) return false
@@ -358,6 +401,7 @@ export class Game {
       freezeTotal: q.freezeTotal,
       promptGate: this.race.state === 'Racing' && q.phase === 'off' && reach !== null ? reach + 1 : null,
       lastChoice: q.lastChoice,
+      interrupted: this.interruptFlashT > 0,
     }
   }
 
@@ -466,6 +510,8 @@ export class Game {
 
     // 攻击状态机每步都走：出招动画要播完，命中帧在这里派发
     this.practiceTarget.tick(h)
+    this.selfHits.tick(h)
+    if (this.interruptFlashT > 0) this.interruptFlashT = Math.max(0, this.interruptFlashT - h)
     const hitKind = this.attack.tick(h)
     if (hitKind) this.onAttackHit(hitKind)
 
@@ -516,6 +562,15 @@ export class Game {
 
     // 障碍判定放在物理结算之后：读到的是本步真实位置，不会穿过摆臂再判定
     const st = player.read()
+
+    // 圆角护栏顶：胶囊会稳在圆顶切点、甚至半挂在护栏内侧棱上（控制器不模拟侧翻），
+    // 补一条规则——脚底离地超过 0.4 m 又贴着护栏带，就按"滑下圆顶"处理，朝赛道内滑落
+    const railTopY = 0.4
+    const railBandX = TRACK.width / 2 - 0.5
+    if (st.y > railTopY && Math.abs(st.x) > railBandX && this.race.state !== 'Finished') {
+      player.slipOffRail(st.x > 0 ? -1 : 1)
+    }
+
     if (this.race.state === 'Racing' || this.race.state === 'Respawning') {
       const hit = this.world?.obstacles.hit(st.x, st.y, st.z)
       if (hit) player.applyKnockback(hit)

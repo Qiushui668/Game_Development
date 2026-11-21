@@ -164,15 +164,25 @@ export class GameWorld {
     return group
   }
 
-  /** 两侧粉色护栏，合并成 1 个 draw call */
+  /** 两侧粉色护栏（圆角顶），合并成 1 个 draw call */
   private buildRails(): THREE.Mesh {
     const geos: THREE.BufferGeometry[] = []
     const x = TRACK.width / 2 + TRACK.railWidth / 2
     const totalLen = TRACK.length + 20 + TRACK.runoff
+    const centerZ = (20 - (TRACK.length + TRACK.runoff)) / 2
+    const capR = TRACK.railWidth / 2
+    // 方柱只到 0.65，圆顶圆心在 0.75：露出上半圆，最高点正好 1.0，和碰撞屋脊对齐
+    const bodyH = TRACK.railHeight - 0.35
+    const capY = TRACK.railHeight - capR
     for (const side of [-1, 1]) {
-      const g = new THREE.BoxGeometry(TRACK.railWidth, TRACK.railHeight, totalLen)
-      g.translate(side * x, TRACK.railHeight / 2, (20 - (TRACK.length + TRACK.runoff)) / 2)
-      geos.push(g)
+      const body = new THREE.BoxGeometry(TRACK.railWidth, bodyH, totalLen)
+      body.translate(side * x, bodyH / 2, centerZ)
+      geos.push(body)
+      // 顶上一根半圆柱：转 90° 让轴沿 Z，正好接在方柱顶部
+      const cap = new THREE.CylinderGeometry(capR, capR, totalLen, 14, 1)
+      cap.rotateX(Math.PI / 2)
+      cap.translate(side * x, capY, centerZ)
+      geos.push(cap)
     }
     const merged = mergeGeometries(geos, false)
     geos.forEach((g) => g.dispose())
@@ -338,10 +348,26 @@ export class GameWorld {
 
     const railX = TRACK.width / 2 + TRACK.railWidth / 2
     const railHalfLen = (TRACK.length + 20 + TRACK.runoff) / 2
+    const railZ = (20 - (TRACK.length + TRACK.runoff)) / 2
+    // 圆角顶：外观是方柱 + 半圆柱，碰撞用「方柱 + 54° 三角形屋脊」。
+    // 为什么不用圆柱碰撞：胶囊能吸附在圆柱顶、沿着轴心一路走（实测能走到墙前）；
+    // 54° 屋脊大于 maxSlopeClimbAngle(52°)、远大于 minSlopeSlideAngle(32°)，既爬不上也站不住。
+    const roofRise = 0.35
+    const bodyH = TRACK.railHeight - roofRise
+    const roofPts = new Float32Array([
+      -TRACK.railWidth / 2, 0, -railHalfLen,
+      TRACK.railWidth / 2, 0, -railHalfLen,
+      0, roofRise, -railHalfLen,
+      -TRACK.railWidth / 2, 0, railHalfLen,
+      TRACK.railWidth / 2, 0, railHalfLen,
+      0, roofRise, railHalfLen,
+    ])
     for (const side of [-1, 1]) {
-      const rail = RAPIER.ColliderDesc.cuboid(TRACK.railWidth / 2, TRACK.railHeight / 2, railHalfLen)
-        .setTranslation(side * railX, TRACK.railHeight / 2, (20 - (TRACK.length + TRACK.runoff)) / 2)
-      this.physics.createCollider(rail)
+      const body = RAPIER.ColliderDesc.cuboid(TRACK.railWidth / 2, bodyH / 2, railHalfLen)
+        .setTranslation(side * railX, bodyH / 2, railZ)
+      this.physics.createCollider(body)
+      const roof = RAPIER.ColliderDesc.convexHull(roofPts)
+      if (roof) this.physics.createCollider(roof.setTranslation(side * railX, bodyH, railZ))
     }
 
     const rows: Array<{ z: number; pieces: Array<[number, number]> }> = HURDLE_ROWS

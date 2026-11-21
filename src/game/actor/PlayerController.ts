@@ -218,6 +218,24 @@ export class PlayerController {
     return true
   }
 
+  /** 被玩家击倒：进入眩晕、清零横速（不倒地位移，原地被打倒）。返回是否真的生效 */
+  applyStun(seconds: number): boolean {
+    if (seconds <= 0) return false
+    this.stunT = Math.max(this.stunT, seconds)
+    this.vx = 0
+    this.vz = 0
+    this.grounded = false
+    this.jumpBuffer = 0
+    return true
+  }
+
+  /** 圆角护栏顶站不住：取消支撑并给一个朝赛道内的横速，让角色滑回赛道 */
+  slipOffRail(inwardDir: number, speed = 3.2): void {
+    this.vx = inwardDir * speed
+    this.grounded = false
+    this.coyote = 0
+  }
+
   get isStunned(): boolean {
     return this.stunT > 0
   }

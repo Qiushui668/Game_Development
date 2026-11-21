@@ -63,7 +63,7 @@ Game_Development/
 ├─ public/audio/ danzai.mp3（背景音乐）
 ├─ backend/      阶段 B 的 Python 服务端
 ├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
-├─ tools/        perf_probe.py（性能/截图探针）/ verify_m2.py（手感 8 项）/ verify_m3.py（击退 5 项）/ verify_m4.py（音乐 + 答题 12 项）/ verify_m5.py（攻击 9 项）/ build_questions.py（Excel → TS）
+├─ tools/        perf_probe.py（性能/截图探针）/ verify_m2.py（手感 8 项）/ verify_m3.py（击退 5 项）/ verify_m4.py（音乐 + 答题 12 项）/ verify_m5.py（攻击 9 项）/ verify_m6.py（护栏圆角顶 + 答题中断）/ build_questions.py（Excel → TS）
 └─ .venv/
 ```
 
@@ -111,6 +111,8 @@ Game_Development/
 | 重击举臂时手臂"消失" | 肩关节在 x=±0.46，落在半径 0.6 的椭球体内，原长 0.62 的手举到竖直整只被身体吞掉 | 同上的拉长 + 只举到 50° 斜上方；判定仍按 1 s 举臂、1.0 s 命中 |
 | 右键弹浏览器菜单 | `contextmenu` 默认行为 | 画布上 `contextmenu.preventDefault()`；未 Pointer Lock 时左右键不当作攻击，避免开局第一下就出招 |
 | 冲击环在青粉棋盘上看不见 | 环色取了同色系（青/粉） | 单开 `COLORS.impactLight`（冷白）与 `impactHeavy`（暖黄） |
+| 圆角顶护栏还是能站上去沿护栏跑 | 胶囊+运动学控制器不模拟侧翻：无论圆柱顶还是 54° 屋脊，只要法线竖直就能一路"骑"下去（实测改完照样走到墙前） | 碰撞照旧用「方柱 + 54° 屋脊」（爬不上也站不平），再加一条玩法规则：脚底离地 > 0.4 m 且 \|x\| > 8.5 就朝赛道内滑落（`PlayerController.slipOffRail`） |
+| 被别的玩家打倒时答题还继续 | 答题是 Paused，没人管外界命中 | `Game.hitPlayer` 累计轻击/重击，倒地时 `interruptQuiz()`：题作废、墙不拆、退回 Racing、眩晕 1 s，HUD 闪"被击倒！" |
 
 ## 6. Git
 
