@@ -1,11 +1,15 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import { PHYSICS } from '@/game/core/GameConfig'
+import { MATCH, PHYSICS } from '@/game/core/GameConfig'
 import { GameLoop } from '@/game/core/GameLoop'
 import { SceneManager } from '@/game/scene/SceneManager'
 import { Lighting } from '@/game/scene/Lighting'
 import { Environment } from '@/game/scene/Environment'
 import { GameWorld } from '@/game/scene/World'
 import { disposeMaterials } from '@/game/scene/Materials'
+import { Input } from '@/game/input/Input'
+import { PlayerController } from '@/game/actor/PlayerController'
+import { JellyBean } from '@/game/actor/JellyBean'
+import { FollowCamera } from '@/game/actor/FollowCamera'
 import { percentile } from '@/game/utils/MathUtils'
 
 export interface PerfSnapshot {
@@ -16,13 +20,15 @@ export interface PerfSnapshot {
   drawCalls: number
   triangles: number
   samples: number
+  speed: number
+  grounded: boolean
 }
 
 const FRAME_WINDOW = 300
 
 /**
- * 游戏总装配：渲染器 / 灯光 / 环境 / 物理世界 / 帧循环。
- * 只负责生命周期与装配，不承载玩法逻辑。
+ * 游戏总装配：渲染器 / 灯光 / 环境 / 物理世界 / 玩家 / 帧循环。
+ * 只负责生命周期与装配，不承载玩法规则。
  */
 export class Game {
   private manager: SceneManager | null = null
@@ -31,6 +37,10 @@ export class Game {
   private world: GameWorld | null = null
   private physics: RAPIER.World | null = null
   private loop: GameLoop | null = null
+  private input: Input | null = null
+  private player: PlayerController | null = null
+  private jelly: JellyBean | null = null
+  private followCam: FollowCamera | null = null
 
   private readonly frameTimes: number[] = []
   private ready = false
@@ -59,6 +69,18 @@ export class Game {
     this.world = world
     manager.scene.add(world.group)
 
+    // 玩家：脚底从 0.35 m 落下，避免第一帧就卡在地面里
+    const spawn = { x: 0, y: 0.35, z: MATCH.spawnZ }
+    const player = new PlayerController(physics, spawn)
+    const jelly = new JellyBean()
+    jelly.group.position.set(spawn.x, spawn.y, spawn.z)
+    manager.scene.add(jelly.group)
+    this.player = player
+    this.jelly = jelly
+
+    this.followCam = new FollowCamera(manager.camera)
+    this.input = new Input(manager.canvas)
+
     this.loop = new GameLoop(PHYSICS.fixedStep, PHYSICS.maxSubSteps, this.onFixedUpdate, this.onRender)
     this.ready = true
 
@@ -67,12 +89,33 @@ export class Game {
         __PPR: {
           ready: true,
           getPerf: () => this.getPerf(),
+          getPlayer: () => this.player?.read() ?? null,
           /** 调试取景：性能探针用它拍特写，不参与玩法 */
           setCamera: (pos: [number, number, number], target: [number, number, number]) => {
             const cam = this.manager?.camera
             if (!cam) return
             cam.position.set(pos[0], pos[1], pos[2])
             cam.lookAt(target[0], target[1], target[2])
+          },
+          /** 自动化验收用：持续注入移动意图（绕过键盘），jump 为一次性 */
+          stepInput: (x: number, y: number, jump: boolean, sprint = false) => {
+            this.debugAxes = { x, y, sprint }
+            if (jump) this.debugJump = true
+          },
+          releaseInput: () => {
+            this.debugAxes = null
+          },
+          teleport: (x: number, y: number, z: number) => {
+            this.player?.teleport(x, y, z)
+            this.followCam?.snap()
+          },
+          /** 调试：环绕视角（degree），用于正面验收角色 */
+          setOrbit: (yawDeg: number, pitchDeg = 9) => {
+            const cam = this.followCam
+            if (!cam) return
+            cam.yaw = (yawDeg * Math.PI) / 180
+            cam.pitch = (pitchDeg * Math.PI) / 180
+            cam.snap()
           },
         },
       })
@@ -94,6 +137,7 @@ export class Game {
     const avg = samples > 0 ? times.reduce((a, b) => a + b, 0) / samples : 0
     const sorted = [...times].sort((a, b) => a - b)
     const info = this.manager?.renderer.info
+    const state = this.player?.read()
     return {
       fps: avg > 0 ? 1000 / avg : 0,
       avgMs: avg,
@@ -102,6 +146,8 @@ export class Game {
       drawCalls: info?.render.calls ?? 0,
       triangles: info?.render.triangles ?? 0,
       samples,
+      speed: state?.speed ?? 0,
+      grounded: state?.grounded ?? true,
     }
   }
 
@@ -110,6 +156,17 @@ export class Game {
     this.disposed = true
     this.loop?.stop()
     this.loop = null
+
+    this.input?.dispose()
+    this.input = null
+
+    if (this.jelly && this.manager) {
+      this.manager.scene.remove(this.jelly.group)
+      this.jelly.dispose()
+    }
+    this.jelly = null
+    this.player = null
+    this.followCam = null
 
     if (this.world && this.manager) {
       this.manager.scene.remove(this.world.group)
@@ -134,17 +191,49 @@ export class Game {
     this.ready = false
   }
 
-  /** 固定物理步：先步进物理，再把位姿与装饰动画同步给渲染层 */
+  /** 自动化验收用的合成输入（仅 DEV） */
+  private debugAxes: { x: number; y: number; sprint: boolean } | null = null
+  private debugJump = false
+
+  /** 固定物理步：算意图 → 步进物理 → 结算 → 装饰动画 */
   private readonly onFixedUpdate = (h: number): void => {
-    if (!this.physics) return
-    this.physics.step()
+    const physics = this.physics
+    const player = this.player
+    if (!physics || !player) return
+
+    let axes = { x: 0, y: 0, sprint: false }
+    let jump = false
+    if (this.debugAxes) {
+      axes = { x: this.debugAxes.x, y: this.debugAxes.y, sprint: this.debugAxes.sprint }
+      jump = this.debugJump
+      this.debugJump = false
+    } else if (this.input) {
+      axes = this.input.readAxes()
+      jump = this.input.consumeJump()
+    }
+
+    player.prepare(h, { ...axes, jump, yaw: this.followCam?.yaw ?? 0 })
+    physics.step()
+    player.sync(h)
     this.world?.update(h)
   }
 
-  /** 渲染帧：只记录帧时间、跟随相机 + 出图，不做玩法逻辑 */
+  /** 渲染帧：鼠标视角 → 角色动画 → 相机 → 出图 */
   private readonly onRender = (dtReal: number): void => {
     this.frameTimes.push(dtReal * 1000)
     if (this.frameTimes.length > FRAME_WINDOW) this.frameTimes.shift()
+
+    if (this.input && this.followCam) {
+      const look = this.input.consumeLook()
+      this.followCam.rotateLook(look.yaw, look.pitch)
+    }
+
+    if (this.player && this.jelly && this.followCam) {
+      const state = this.player.read()
+      this.jelly.update(dtReal, state)
+      this.followCam.update(dtReal, state.x, state.y, state.z)
+    }
+
     if (this.manager && this.environment) {
       this.environment.followCamera(this.manager.camera)
     }

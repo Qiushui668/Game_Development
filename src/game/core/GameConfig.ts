@@ -70,9 +70,9 @@ export const PLAYER = {
 
 /** 第三人称镜头（M2 使用） */
 export const CAMERA = {
-  distance: 7,
+  distance: 6.4,
   height: 4,
-  targetHeight: 1.4,
+  targetHeight: 1.35,
   pitchMin: -15,
   pitchMax: 55,
   sensitivity: 0.003,

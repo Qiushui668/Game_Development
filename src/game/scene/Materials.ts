@@ -44,7 +44,8 @@ function makeCheckerTexture(): THREE.CanvasTexture {
   tex.wrapT = THREE.RepeatWrapping
   tex.magFilter = THREE.NearestFilter
   tex.colorSpace = THREE.SRGBColorSpace
-  tex.anisotropy = 1
+  // 掠射角下 anisotropy=1 会直接跳最高 mip，近处地面被平均成一片粉；抬到 8 保住格子
+  tex.anisotropy = 8
   return tex
 }
 
@@ -70,6 +71,7 @@ function makeStripeTexture(): THREE.CanvasTexture {
   tex.wrapS = THREE.RepeatWrapping
   tex.wrapT = THREE.RepeatWrapping
   tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 8
   return tex
 }
 
@@ -82,7 +84,8 @@ export function getMaterials(): MaterialSet {
   const checker = makeCheckerTexture()
   const stripe = makeStripeTexture()
   cached = {
-    floorStart: new THREE.MeshLambertMaterial({ map: checker, color: 0xffd9ec }),
+    // 起步区原来染成 0xffd9ec，把青/粉两色都洗成一片浅粉、棋盘纹几乎看不出来；改为原色
+    floorStart: new THREE.MeshLambertMaterial({ map: checker, color: 0xffffff }),
     floorMain: new THREE.MeshLambertMaterial({ map: checker, color: 0xffffff }),
     floorFinish: new THREE.MeshLambertMaterial({ map: checker, color: 0xd6cfff }),
     side: new THREE.MeshLambertMaterial({ color: COLORS.start }),

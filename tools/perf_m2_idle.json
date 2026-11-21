@@ -1,0 +1,110 @@
+{
+  "url": "http://localhost:5173/",
+  "collectedAt": "2026-11-21 13:30:59",
+  "webgl": {
+    "webgl": true,
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce GT 610 (0x0000104A) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+  },
+  "perf": {
+    "fps": 58.46541690133218,
+    "avgMs": 17.104128440367184,
+    "p99Ms": 16.800000000000182,
+    "maxMs": 100,
+    "drawCalls": 28,
+    "triangles": 6680,
+    "samples": 218,
+    "speed": 0,
+    "grounded": true
+  },
+  "samples": [
+    {
+      "fps": 20.60439560438902,
+      "avgMs": 48.53333333334884,
+      "p99Ms": 100,
+      "maxMs": 100,
+      "drawCalls": 28,
+      "triangles": 6680,
+      "samples": 3,
+      "speed": 0,
+      "grounded": false
+    },
+    {
+      "fps": 51.34400483237331,
+      "avgMs": 19.476470588236666,
+      "p99Ms": 100,
+      "maxMs": 100,
+      "drawCalls": 28,
+      "triangles": 6680,
+      "samples": 34,
+      "speed": 0,
+      "grounded": true
+    },
+    {
+      "fps": 55.131467345205635,
+      "avgMs": 18.138461538462252,
+      "p99Ms": 100,
+      "maxMs": 100,
+      "drawCalls": 28,
+      "triangles": 6680,
+      "samples": 65,
+      "speed": 0,
+      "grounded": true
+    },
+    {
+      "fps": 56.61712668081938,
+      "avgMs": 17.662500000000488,
+      "p99Ms": 100,
+      "maxMs": 100,
+      "drawCalls": 28,
+      "triangles": 6680,
+      "samples": 96,
+      "speed": 0,
+      "grounded": true
+    },
+    {
+      "fps": 57.40891420305458,
+      "avgMs": 17.41889763779564,
+      "p99Ms": 50,
+      "maxMs": 100,
+      "drawCalls": 28,
+      "triangles": 6680,
+      "samples": 127,
+      "speed": 0,
+      "grounded": true
+    },
+    {
+      "fps": 57.90090882439068,
+      "avgMs": 17.27088607594966,
+      "p99Ms": 50,
+      "maxMs": 100,
+      "drawCalls": 28,
+      "triangles": 6680,
+      "samples": 158,
+      "speed": 0,
+      "grounded": true
+    },
+    {
+      "fps": 58.22596630326972,
+      "avgMs": 17.174468085106632,
+      "p99Ms": 50,
+      "maxMs": 100,
+      "drawCalls": 28,
+      "triangles": 6680,
+      "samples": 188,
+      "speed": 0,
+      "grounded": true
+    },
+    {
+      "fps": 58.46541690133218,
+      "avgMs": 17.104128440367184,
+      "p99Ms": 16.800000000000182,
+      "maxMs": 100,
+      "drawCalls": 28,
+      "triangles": 6680,
+      "samples": 218,
+      "speed": 0,
+      "grounded": true
+    }
+  ]
+}

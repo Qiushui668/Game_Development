@@ -51,12 +51,13 @@ Game_Development/
 │  ├─ game/
 │  │  ├─ core/   GameConfig / GameLoop / GameState / Game
 │  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World
-│  │  ├─ actor/  JellyBean（程序化果冻人，联机只换色不换几何）
+│  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）
+│  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃边沿触发）
 │  │  └─ utils/  MathUtils
 │  └─ types/     network.ts（协议冻结）
 ├─ backend/      阶段 B 的 Python 服务端
 ├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
-├─ tools/        perf_probe.py（性能探针）
+├─ tools/        perf_probe.py（性能/截图探针）/ verify_m2.py（手感 8 项验收）
 └─ .venv/
 ```
 
@@ -83,6 +84,11 @@ Game_Development/
 | pip 触发整页刷新 | Vite 监听 `.venv` | 已在 `vite.config.ts` 的 `server.watch.ignored` 排除 |
 | draw call 暴涨 | `BoxGeometry` 配 6 面材质数组 = 每块 6 个 draw | 地形改用「平面 + 实体块」拆分 |
 | 突然变卡 | 向日葵虚拟显示器抢主屏 | 排查 `OrayIddDriver Device` |
+| 贴地视角地板糊成纯粉块 | 贴图 `anisotropy = 1`，掠射角直跳最高 mip | checker / stripe 设 `anisotropy = 8` |
+| 角色后脑出现白边 | 平面圆盘脸板贴在椭球上，顶部必然突出 | 脸改成微凸椭球（半径 0.36、scale 1.15/1.05/0.92），边缘自然收进身体 |
+| 阴面脸部发灰 | Lambert 只吃光照方向 | 脸材质加 `emissive` 0.3 保住奶油色 |
+| `npm run build` 报 exit 1 但其实成功 | PowerShell 把自带的 stderr 告警算作失败 | 判成功看 `✓ built in`，或 `*>` 重定向后读日志 |
+| 拍不到角色腾空截图 | 注入跳跃后 220 ms 就落地 | `setInterval` 每 900 ms 触发一次跳跃再截 |
 
 ## 6. Git
 

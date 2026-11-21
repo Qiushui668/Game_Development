@@ -1,9 +1,8 @@
 import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { COLORS, CROWD_COLORS, MATCH, TRACK } from '@/game/core/GameConfig'
+import { COLORS, TRACK } from '@/game/core/GameConfig'
 import { getMaterials } from '@/game/scene/Materials'
-import { JellyBean } from '@/game/actor/JellyBean'
 
 interface DynamicEntry {
   mesh: THREE.Mesh
@@ -32,6 +31,16 @@ const HURDLE_ROWS: Array<{ z: number; pieces: Array<[number, number]> }> = [
 const HURDLE_HEIGHT = 2.2
 const HURDLE_THICKNESS = 0.8
 
+/** 斜坡参数：坡度 10.6°，跑上去能验证控制器贴坡与落坡 */
+const RAMP_ANGLE = (10.6 * Math.PI) / 180
+const RAMP_LENGTH = 8
+const RAMP_THICKNESS = 0.5
+const RAMP_WIDTH = TRACK.width - 2
+const RAMP_Z = -66
+/** 让坡面上沿的入口正好落在 y = 0，避免出现 0.4 m 台阶 */
+const RAMP_Y =
+  (RAMP_LENGTH / 2) * Math.sin(RAMP_ANGLE) - (RAMP_THICKNESS / 2) * Math.cos(RAMP_ANGLE)
+
 /**
  * 场景世界：棋盘赛道、粉栏、条纹栏架、旋转扫地杆、滚轴、终点皇冠、起点人群。
  * 视觉与物理分离：视觉合并成少量 draw call，物理只用最简单的 cuboid。
@@ -41,7 +50,6 @@ export class GameWorld {
   private readonly dynamics: DynamicEntry[] = []
   private readonly spinners: Spinner[] = []
   private readonly rollers: Array<{ group: THREE.Group; speed: number }> = []
-  private readonly actors: JellyBean[] = []
 
   constructor(private readonly physics: RAPIER.World) {
     this.group.add(
@@ -49,8 +57,8 @@ export class GameWorld {
       this.buildRails(),
       this.buildHurdles(),
       this.buildPins(),
+      this.buildRamp(),
       this.buildCrown(),
-      this.buildSpawnActors(),
     )
     this.buildSpinners()
     this.buildColliders()
@@ -77,8 +85,6 @@ export class GameWorld {
     this.dynamics.length = 0
     this.spinners.length = 0
     this.rollers.length = 0
-    this.actors.forEach((a) => a.dispose())
-    this.actors.length = 0
     this.group.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.InstancedMesh) o.geometry.dispose()
     })
@@ -252,30 +258,30 @@ export class GameWorld {
     return mesh
   }
 
-  /**
-   * 起点角色：数量 = 本局玩家数（MATCH.playerSlots）。
-   * 单机阶段只有 1 个；联机阶段按 CROWD_COLORS 给每个玩家分配颜色，几何复用同一套。
-   */
-  private buildSpawnActors(): THREE.Group {
-    const group = new THREE.Group()
-    group.name = 'SpawnActors'
-
-    const count = MATCH.playerSlots
-    for (let i = 0; i < count; i++) {
-      const bean = new JellyBean({
-        color: i === 0 ? COLORS.jellyBody : CROWD_COLORS[(i - 1) % CROWD_COLORS.length],
-        scale: 1.0,
-      })
-      const x = (i - (count - 1) / 2) * MATCH.slotSpacing
-      bean.group.position.set(x, 0, MATCH.spawnZ)
-      group.add(bean.group)
-      this.actors.push(bean)
-    }
-    return group
+  /** 斜坡：验证角色控制器在上坡/落坡时的表现（坡度约 10.6°） */
+  private buildRamp(): THREE.Mesh {
+    const geo = new THREE.BoxGeometry(RAMP_WIDTH, RAMP_THICKNESS, RAMP_LENGTH)
+    const mesh = new THREE.Mesh(geo, getMaterials().pin)
+    mesh.position.set(0, RAMP_Y, RAMP_Z)
+    mesh.rotation.x = RAMP_ANGLE
+    mesh.name = 'Ramp'
+    mesh.matrixAutoUpdate = false
+    mesh.updateMatrix()
+    return mesh
   }
 
-  /** 物理：起点平台 + 赛道 + 护栏 + 栏架。扫地杆与滚轴暂不给碰撞（阶段 C 处理） */
+  /** 物理：起点平台 + 赛道 + 护栏 + 栏架 + 斜坡。扫地杆与滚轴暂不给碰撞（阶段 C 处理） */
   private buildColliders(): void {
+    const rampQuat = {
+      x: Math.sin(RAMP_ANGLE / 2),
+      y: 0,
+      z: 0,
+      w: Math.cos(RAMP_ANGLE / 2),
+    }
+    const ramp = RAPIER.ColliderDesc.cuboid(RAMP_WIDTH / 2, RAMP_THICKNESS / 2, RAMP_LENGTH / 2)
+      .setTranslation(0, RAMP_Y, RAMP_Z)
+      .setRotation(rampQuat)
+    this.physics.createCollider(ramp)
     const groundHalfLen = (TRACK.length + 20) / 2
     const ground = RAPIER.ColliderDesc.cuboid(
       TRACK.width / 2,

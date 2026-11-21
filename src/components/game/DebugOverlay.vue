@@ -14,6 +14,8 @@ const lines = computed(() => {
     `max ${s.maxMs.toFixed(2)} ms`,
     `draw ${s.drawCalls}`,
     `tri ${s.triangles}`,
+    `spd ${s.speed.toFixed(2)} m/s`,
+    s.grounded ? 'GND' : 'AIR',
     `n=${s.samples}`,
   ]
 })

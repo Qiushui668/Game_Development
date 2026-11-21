@@ -6,7 +6,7 @@
 
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
-| A | 单机闭环（单人跑完全程 + 计时 + 结算） | M1 进行中 |
+| A | 单机闭环（单人跑完全程 + 计时 + 结算） | 进行中（M1 → M1.6 → M2 已完成） |
 | B | 局域网 2–5 人联机 | 未开始 |
 | C | 上线服务器 2–8 人联机 | 未开始 |
 
@@ -29,6 +29,12 @@ npm run build
 
 ```powershell
 .\.venv\Scripts\python.exe tools\perf_probe.py --url http://localhost:5173/
+```
+
+手感验收（角色控制 / 跳跃 / 坡面 / 碰撞 / 复活，8 项）：
+
+```powershell
+.\.venv\Scripts\python.exe tools\verify_m2.py
 ```
 
 ## 文档
