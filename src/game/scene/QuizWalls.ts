@@ -14,9 +14,14 @@ export interface QuizWall {
   fade: number
 }
 
-/** 空气墙尺寸：铺满赛道、高 4.4 m，跳不过去 */
-const WALL_HEIGHT = 4.4
-const WALL_WIDTH = TRACK.width - 0.4
+/** 空气墙尺寸：铺满赛道并盖过两侧护栏，并在护栏外再留 0.6 m，跳上护栏也绕不过去 */
+const WALL_HEIGHT = 4.6
+const WALL_WIDTH = (TRACK.width / 2 + TRACK.railWidth + 0.6) * 2
+/**
+ * 碰撞体比画面更宽：护栏外没有地面，但可以斜跳出去再从墙后落回赛道。
+ * 把碰撞横向延伸到 ±16 m，堵住这条"空中绕过"的路；这段墙看不见，但玩家也站不住。
+ */
+const WALL_COLLIDER_WIDTH = 32
 const FADE_SECONDS = 0.35
 
 function css(hex: number): string {
@@ -25,7 +30,7 @@ function css(hex: number): string {
 
 /** 一面墙的贴图：半透明玻璃底 + 虚线边框 + 大号序号 + 提示语 */
 function makeWallTexture(gate: QuizGateDef): THREE.CanvasTexture {
-  const w = 768
+  const w = 880
   const h = 200
   const canvas = document.createElement('canvas')
   canvas.width = w
@@ -156,5 +161,6 @@ export class QuizWalls {
 
 export const QUIZ_WALL_HEIGHT = WALL_HEIGHT
 export const QUIZ_WALL_WIDTH = WALL_WIDTH
+export const QUIZ_WALL_COLLIDER_WIDTH = WALL_COLLIDER_WIDTH
 export const QUIZ_WALL_COLOR = COLORS.checkerCyan
 export const QUIZ_WALL_ACCENT = css(COLORS.rail)

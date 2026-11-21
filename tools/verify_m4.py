@@ -62,6 +62,56 @@ MEASURE_JS = r"""
     await sleep(120);
   }
 
+  // ---------- 2.5 从两侧绕：站在护栏顶 / 斜向跳，都不能过墙 ----------
+  P.releaseInput();
+  P.teleport(9.25, 1.15, -74);
+  await sleep(350);
+  const onRail = P.getPlayer();
+  P.stepInput(0, 1, false, false);
+  await sleep(1300);
+  P.releaseInput();
+  const railEnd = P.getPlayer();
+  out.railBypass = {
+    startY: onRail.y,
+    endZ: railEnd.z,
+    endX: railEnd.x,
+    blocked: railEnd.z > -78,
+  };
+
+  P.teleport(7.6, 0.05, -74);
+  await sleep(200);
+  P.stepInput(1, 1, true);
+  await sleep(900);
+  P.releaseInput();
+  const sideJump = P.getPlayer();
+  out.sideJump = { z: sideJump.z, x: sideJump.x, blocked: sideJump.z > -78 };
+
+  // 站在护栏顶、连续斜跳试图从墙外绕过去：只统计"还在赛道走廊内（|x| ≤ 10.2）"的采样，
+  // 跳到护栏外悬空属于掉进虚空复活，不算绕过
+  P.teleport(9.0, 1.02, -74);
+  await sleep(300);
+  let minInsideZ = 0;
+  let maxX = 0;
+  P.stepInput(1, 0.55, false, true);
+  for (let i = 0; i < 6; i++) {
+    P.stepInput(1, 0.55, true, true);
+    for (let k = 0; k < 6; k++) {
+      await sleep(45);
+      const s = P.getPlayer();
+      maxX = Math.max(maxX, Math.abs(s.x));
+      if (Math.abs(s.x) <= 10.2) minInsideZ = Math.min(minInsideZ, s.z);
+    }
+  }
+  P.releaseInput();
+  const afterJumps = P.getPlayer();
+  out.railJumpBypass = {
+    minInsideZ,
+    maxX,
+    endZ: afterJumps.z,
+    endX: afterJumps.x,
+    blocked: minInsideZ > -78 && afterJumps.z > -78,
+  };
+
   // ---------- 3. 按 F 开答 ----------
   P.teleport(0, 0.05, -78 + 2.2);
   await sleep(180);

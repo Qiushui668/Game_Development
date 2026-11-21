@@ -11,7 +11,7 @@ import {
   ROLLERS,
   SWEEPERS,
 } from '@/game/physics/ObstacleField'
-import { QuizWalls, QUIZ_WALL_HEIGHT, QUIZ_WALL_WIDTH } from '@/game/scene/QuizWalls'
+import { QuizWalls, QUIZ_WALL_COLLIDER_WIDTH, QUIZ_WALL_HEIGHT } from '@/game/scene/QuizWalls'
 import { QUIZ_GATES } from '@/game/quiz/QuizSystem'
 
 interface DynamicEntry {
@@ -364,11 +364,11 @@ export class GameWorld {
 
   private createQuizCollider(index: number): RAPIER.Collider {
     const z = QUIZ_GATES[index].z
-    const desc = RAPIER.ColliderDesc.cuboid(QUIZ_WALL_WIDTH / 2, QUIZ_WALL_HEIGHT / 2, 0.15).setTranslation(
-      0,
+    const desc = RAPIER.ColliderDesc.cuboid(
+      QUIZ_WALL_COLLIDER_WIDTH / 2,
       QUIZ_WALL_HEIGHT / 2,
-      z,
-    )
+      0.15,
+    ).setTranslation(0, QUIZ_WALL_HEIGHT / 2, z)
     return this.physics.createCollider(desc)
   }
 }
