@@ -47,18 +47,22 @@ Game_Development/
 │  ├─ main.ts / App.vue
 │  ├─ views/GameView.vue
 │  ├─ styles/global.css
-│  ├─ components/game/   GameCanvas.vue / DebugOverlay.vue / RaceHud.vue（计时·倒数·结算）
+│  ├─ components/game/   GameCanvas.vue / DebugOverlay.vue / RaceHud.vue（计时·倒数·结算）/ QuizPanel.vue（F 提示·题面·冻结倒计时）
 │  ├─ game/
 │  │  ├─ core/   GameConfig / GameLoop / GameState / Game
-│  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World
+│  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World / QuizWalls（答题空气墙）
 │  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）
 │  │  ├─ physics/ ObstacleField（障碍布局 + 命中判定，纯 TS，服务端可复用）
-│  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃边沿触发）
+│  │  ├─ quiz/   QuizSystem（墙位 / 抽题 / 冻结读秒，纯 TS，服务端可复用）
+│  │  ├─ audio/  Music（单条 audio 循环 + 答题 duck）
+│  │  ├─ data/   questions.ts（由 `tools/build_questions.py` 从 Excel 生成，勿手改）
+│  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃/F 边沿触发）
 │  │  └─ utils/  MathUtils
 │  └─ types/     network.ts（协议冻结）
+├─ public/audio/ danzai.mp3（背景音乐）
 ├─ backend/      阶段 B 的 Python 服务端
 ├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
-├─ tools/        perf_probe.py（性能/截图探针）/ verify_m2.py（手感 8 项）/ verify_m3.py（击退 5 项）
+├─ tools/        perf_probe.py（性能/截图探针）/ verify_m2.py（手感 8 项）/ verify_m3.py（击退 5 项）/ verify_m4.py（音乐 + 答题 12 项）/ build_questions.py（Excel → TS）
 └─ .venv/
 ```
 
@@ -95,6 +99,12 @@ Game_Development/
 | 滚轴挡住整条路 | 顶面 1.7 m 高于跳高 1.8 m 的可用余量 | 半径 0.65 / 轴心 0.67，顶面 1.32 m，可跳可绕 |
 | 初始化白屏 `illegal race state transition` | 状态机只允许相邻转换 | `Menu → Loading → Countdown` 两步走，不能直跳 |
 | 完赛后人在起点 | 冲线时横速 10 m/s 冲出终点平台掉进虚空触发复活 | 冲线调 `PlayerController.halt()` 清横速 + 终点后铺 12 m 缓冲地 |
+| 空气墙上的白字糊在天空里 | 用 `material.opacity` 做半透明，序号底板跟着一起透 | 透明度写进贴图 alpha（玻璃 0.2 / 底板 0.9），`material.opacity` 固定 1，开门时才整体淡出 |
+| 墙前角色被地形挡住 | 第 1 面墙原本落在坡脊（-70）后 6 m，相机压在坡脊上、角色下半身被坡挡住 | 墙移到 -78（坡脊后 8 m），镜头落在坡脊之后 |
+| 第 4 面墙前被扫地杆反复扫中 | 墙位 -268 与 -262 的摆臂扫掠圆重叠 | 墙移到 -280，离扫掠边界 ≥ 6 m |
+| 题库答案 43% 都是 B | 源表答案分布集中，直接按原序出题会被背下来 | 抽题后打乱选项顺序（`QuizSystem.issue`），正确项跟随重排 |
+| 答题时鼠标点不了选项 | Pointer Lock 期间光标不可见 | 进答题先 `Input.exitLock()`，答对后在点击事件里 `requestLock()` 恢复视角 |
+| 答题期间比赛计时是否停 | 若停表，冻结 3 s 就没有惩罚 | `Paused` 也累加 `raceTimeMs`；同时冻结世界（障碍角度不推进） |
 
 ## 6. Git
 

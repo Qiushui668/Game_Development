@@ -12,6 +12,8 @@ import { PlayerController } from '@/game/actor/PlayerController'
 import { JellyBean } from '@/game/actor/JellyBean'
 import { FollowCamera } from '@/game/actor/FollowCamera'
 import { percentile } from '@/game/utils/MathUtils'
+import { Music } from '@/game/audio/Music'
+import { QuizSystem, QUIZ_GATES, type QuizPhase } from '@/game/quiz/QuizSystem'
 
 export interface PerfSnapshot {
   fps: number
@@ -49,6 +51,27 @@ const COUNTDOWN_SECONDS = 3
 /** 完赛到弹结算面板的停顿，让玩家看清终点 */
 const RESULT_DELAY = 0.9
 
+/** 答题 UI 快照：10 Hz 拉取，帧循环不触碰 Vue 响应式 */
+export interface QuizSnapshot {
+  phase: QuizPhase
+  /** 正在答的墙号（1 起），未在答题为 null */
+  gate: number | null
+  gateTotal: number
+  /** 已解开的墙数 */
+  solved: number
+  category: string
+  text: string
+  options: string[]
+  /** 本题答错次数 */
+  wrongCount: number
+  /** 冻结剩余秒 */
+  freezeLeft: number
+  freezeTotal: number
+  /** 站在墙前可按 F 时，返回墙号（1 起） */
+  promptGate: number | null
+  lastChoice: number | null
+}
+
 /**
  * 游戏总装配：渲染器 / 灯光 / 环境 / 物理世界 / 玩家 / 帧循环。
  * 只负责生命周期与装配，不承载玩法规则。
@@ -64,6 +87,11 @@ export class Game {
   private player: PlayerController | null = null
   private jelly: JellyBean | null = null
   private followCam: FollowCamera | null = null
+  private music: Music | null = null
+  private audioGesture: (() => void) | null = null
+
+  /** 答题玩法（抽题 / 冻结 / 已解开的墙） */
+  private readonly quiz = new QuizSystem()
 
   private readonly frameTimes: number[] = []
   private readonly race = new RaceStateMachine()
@@ -116,6 +144,13 @@ export class Game {
     this.followCam = new FollowCamera(manager.camera)
     this.input = new Input(manager.canvas)
 
+    // 背景音乐：浏览器要求用户手势才能出声，首次点击/按键时启动
+    this.music = new Music()
+    const startAudio = (): void => this.music?.start()
+    this.audioGesture = startAudio
+    manager.canvas.addEventListener('pointerdown', startAudio, { once: true })
+    window.addEventListener('keydown', startAudio, { once: true })
+
     this.loop = new GameLoop(PHYSICS.fixedStep, PHYSICS.maxSubSteps, this.onFixedUpdate, this.onRender)
     this.ready = true
     this.startCountdown()
@@ -163,6 +198,43 @@ export class Game {
               : null,
           getTrack: () => ({ length: TRACK.length, finishZ: TRACK.finishZ, spawnZ: MATCH.spawnZ }),
           getRace: () => this.getRace(),
+          getQuiz: () => this.getQuiz(),
+          /** 自动化验收用：瞬移到第 i 面墙前 3 m（0 起） */
+          teleportToGate: (i: number) => {
+            const gate = QUIZ_GATES[Math.max(0, Math.min(QUIZ_GATES.length - 1, i))]
+            this.player?.teleport(0, 0.35, gate.z + 3)
+            this.followCam?.snap()
+          },
+          /** 自动化验收用：直接进入第 i 面墙的答题（0 起） */
+          startQuiz: (i = 0) => {
+            if (this.race.state === 'Racing') this.beginQuiz(i)
+          },
+          /** 自动化验收用：作答（下标对应 getQuiz().options） */
+          answerQuiz: (choice: number) => this.answerQuiz(choice),
+          /** 自动化验收用：答对 / 答错（自动挑选项） */
+          answerCorrect: () => this.answerQuiz(this.quiz.correctIndex),
+          answerWrong: () => {
+            if (this.quiz.phase !== 'asking') return false
+            const wrong = [0, 1, 2, 3].find((i) => i !== this.quiz.correctIndex) ?? 0
+            return this.answerQuiz(wrong)
+          },
+          /** 自动化验收用：读墙位与是否已开 */
+          getQuizWalls: () =>
+            this.world
+              ? this.world.quizWalls.walls.map((w) => ({
+                  index: w.index,
+                  z: w.z,
+                  opened: w.opened,
+                  visible: w.mesh.visible,
+                }))
+              : null,
+          /** 自动化验收用：强制启动背景音乐（手动手势之外） */
+          startMusic: () => this.music?.start(),
+          /** 自动化验收用：一次性解开全部墙（测冲线用） */
+          openAllGates: () => {
+            for (let i = 0; i < QUIZ_GATES.length; i++) this.world?.openQuizGate(i)
+          },
+          getMusic: () => this.music?.snapshot() ?? null,
           /** 自动化验收用：跳过 3 秒倒数，直接进入 Racing */
           startNow: () => {
             if (this.race.state === 'Countdown') {
@@ -196,13 +268,64 @@ export class Game {
     this.countdownLeft = COUNTDOWN_SECONDS
   }
 
-  /** 重新开一局：复位角色、障碍角度与计时 */
+  /** 重新开一局：复位角色、障碍角度、答题墙与计时 */
   restart(): void {
     if (this.race.state !== 'Result') return
+    this.quiz.reset()
+    this.world?.resetQuizGates()
+    this.music?.duck(false)
+    this.input?.setClickLock(true)
     this.player?.teleport(this.spawnX, this.spawnY, this.spawnZ)
     this.followCam?.snap()
     this.world?.obstacles.reset()
     this.startCountdown()
+  }
+
+  /** 按 F 进入答题：抽一道题，锁输入、松开鼠标、压低音乐 */
+  beginQuiz(gate: number): void {
+    if (this.race.state !== 'Racing') return
+    this.quiz.open(gate)
+    this.race.set('Paused')
+    this.debugAxes = null
+    this.input?.exitLock()
+    this.input?.setClickLock(false)
+    this.music?.duck(true)
+  }
+
+  /** UI / 调试作答；返回是否答对。答对即拆墙并恢复比赛 */
+  answerQuiz(choice: number): boolean {
+    if (this.quiz.phase !== 'asking' || this.quiz.activeGate === null) return false
+    const gate = this.quiz.activeGate
+    const correct = this.quiz.submit(choice)
+    if (correct) {
+      this.world?.openQuizGate(gate)
+      this.music?.duck(false)
+      this.input?.setClickLock(true)
+      if (this.race.state === 'Paused') this.race.set('Racing')
+      this.input?.requestLock()
+    }
+    return correct
+  }
+
+  /** 供 HUD 以 10 Hz 拉取的答题快照 */
+  getQuiz(): QuizSnapshot {
+    const q = this.quiz
+    const st = this.player?.read()
+    const reach = st ? q.gateInReach(st.z) : null
+    return {
+      phase: q.phase,
+      gate: q.activeGate === null ? null : q.activeGate + 1,
+      gateTotal: QUIZ_GATES.length,
+      solved: q.solvedCount,
+      category: q.question?.category ?? '',
+      text: q.question?.text ?? '',
+      options: q.options.slice(),
+      wrongCount: q.wrongCount,
+      freezeLeft: q.freezeLeft,
+      freezeTotal: q.freezeTotal,
+      promptGate: this.race.state === 'Racing' && q.phase === 'off' && reach !== null ? reach + 1 : null,
+      lastChoice: q.lastChoice,
+    }
   }
 
   /** 供 HUD 以 10 Hz 拉取的比赛快照 */
@@ -253,6 +376,14 @@ export class Game {
     this.input?.dispose()
     this.input = null
 
+    if (this.manager && this.audioGesture) {
+      this.manager.canvas.removeEventListener('pointerdown', this.audioGesture)
+      window.removeEventListener('keydown', this.audioGesture)
+    }
+    this.audioGesture = null
+    this.music?.dispose()
+    this.music = null
+
     if (this.jelly && this.manager) {
       this.manager.scene.remove(this.jelly.group)
       this.jelly.dispose()
@@ -287,6 +418,8 @@ export class Game {
   /** 自动化验收用的合成输入（仅 DEV） */
   private debugAxes: { x: number; y: number; sprint: boolean } | null = null
   private debugJump = false
+  /** 自动化验收用：请求进入面前的答题墙 */
+  private quizRequested = false
 
   /** 固定物理步：算意图 → 步进物理 → 结算 → 障碍判定 → 比赛状态 */
   private readonly onFixedUpdate = (h: number): void => {
@@ -295,6 +428,9 @@ export class Game {
     if (!physics || !player) return
 
     const state = this.race.state
+    // 答题冻结读秒独立推进：Paused 期间也要走完 3 s 才换题
+    this.quiz.tick(h)
+
     if (state === 'Countdown') {
       this.countdownLeft -= h
       if (this.countdownLeft <= 0) {
@@ -303,7 +439,8 @@ export class Game {
         this.raceTimeMs = 0
       }
     }
-    if (state === 'Racing') this.raceTimeMs += h * 1000
+    // 答题期间计时继续累加：冻结 3 s 才有惩罚意义
+    if (state === 'Racing' || state === 'Paused') this.raceTimeMs += h * 1000
 
     let axes = { x: 0, y: 0, sprint: false }
     let jump = false
@@ -317,8 +454,18 @@ export class Game {
         axes = this.input.readAxes()
         jump = this.input.consumeJump()
       }
+      // 墙前按 F 开答（读的是本步之前的位置，够用：墙前 6 m 都能触发）
+      if (this.quiz.phase === 'off') {
+        const gate = this.quiz.gateInReach(player.read().z)
+        const want = this.quizRequested || (this.input ? this.input.consumeInteract() : false)
+        this.quizRequested = false
+        if (want && gate !== null) this.beginQuiz(gate)
+      }
     } else {
       this.debugJump = false
+      this.quizRequested = false
+      this.input?.consumeJump()
+      this.input?.consumeInteract()
     }
 
     player.prepare(h, { ...axes, jump, yaw: this.followCam?.yaw ?? 0 })
@@ -327,8 +474,10 @@ export class Game {
 
     // 障碍判定放在物理结算之后：读到的是本步真实位置，不会穿过摆臂再判定
     const st = player.read()
-    const hit = this.world?.obstacles.hit(st.x, st.y, st.z)
-    if (hit) player.applyKnockback(hit)
+    if (this.race.state === 'Racing' || this.race.state === 'Respawning') {
+      const hit = this.world?.obstacles.hit(st.x, st.y, st.z)
+      if (hit) player.applyKnockback(hit)
+    }
 
     // 终点：脚底越过 finishZ 即完赛，并急停，避免顺着速度冲下终点平台
     if (this.race.state === 'Racing' && st.z <= TRACK.finishZ) {
@@ -344,7 +493,8 @@ export class Game {
       if (this.resultDelay >= RESULT_DELAY) this.race.set('Result')
     }
 
-    this.world?.update(h)
+    // 答题 Paused 期间世界也一起冻结：倒计时读秒时障碍不转、扫地杆不扫
+    if (this.race.state !== 'Paused') this.world?.update(h)
   }
 
   /** 渲染帧：鼠标视角 → 角色动画 → 相机 → 出图 */

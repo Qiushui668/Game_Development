@@ -5,9 +5,12 @@
 export class Input {
   private readonly keys = new Set<string>()
   private jumpQueued = false
+  private interactQueued = false
   private lookX = 0
   private lookY = 0
   private locked = false
+  /** 答题面板打开时关掉"点画布自动锁鼠标"，否则误点画布会重新锁死光标 */
+  private clickLock = true
   private readonly canvas: HTMLElement
 
   onLockChange?: (locked: boolean) => void
@@ -48,6 +51,30 @@ export class Input {
     return queued
   }
 
+  /** F 键（交互 / 开始答题）同样是边沿触发 */
+  consumeInteract(): boolean {
+    const queued = this.interactQueued
+    this.interactQueued = false
+    return queued
+  }
+
+  /** 答题时释放鼠标，让指针能点选项 */
+  exitLock(): void {
+    if (this.locked) document.exitPointerLock()
+    this.lookX = 0
+    this.lookY = 0
+  }
+
+  /** 答完题恢复第一人称视角（必须在用户手势（点击）里调用） */
+  requestLock(): void {
+    if (!this.locked) void this.canvas.requestPointerLock()
+  }
+
+  /** 答题期间关掉"点击画布自动锁鼠标"，保证光标始终能点选项 */
+  setClickLock(enabled: boolean): void {
+    this.clickLock = enabled
+  }
+
   dispose(): void {
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
@@ -71,6 +98,7 @@ export class Input {
       if (!e.repeat) this.jumpQueued = true
       e.preventDefault()
     }
+    if (key === 'f' && !e.repeat) this.interactQueued = true
     if (key.startsWith('arrow')) e.preventDefault()
   }
 
@@ -83,7 +111,8 @@ export class Input {
   }
 
   private readonly onClick = (): void => {
-    if (!this.locked) void this.canvas.requestPointerLock()
+    if (!this.clickLock || this.locked) return
+    void this.canvas.requestPointerLock()
   }
 
   private readonly onPointerLockChange = (): void => {

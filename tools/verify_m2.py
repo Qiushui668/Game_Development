@@ -124,7 +124,8 @@ MEASURE_JS = r"""
 
   // ---------- 6. 栏架碰撞（z=-82 那排正中是实心的） ----------
   P.releaseInput();
-  P.teleport(0, 0.1, -76);
+  // -226 那排栏架中间有实体段、且离答题墙（-196 / -280）与扫地杆（-214）都够远
+  P.teleport(0, 0.1, -221);
   await sleep(300);
   P.stepInput(0, 1, false, false);
   await sleep(1400);

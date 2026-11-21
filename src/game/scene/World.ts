@@ -11,6 +11,8 @@ import {
   ROLLERS,
   SWEEPERS,
 } from '@/game/physics/ObstacleField'
+import { QuizWalls, QUIZ_WALL_HEIGHT, QUIZ_WALL_WIDTH } from '@/game/scene/QuizWalls'
+import { QUIZ_GATES } from '@/game/quiz/QuizSystem'
 
 interface DynamicEntry {
   mesh: THREE.Mesh
@@ -38,9 +40,13 @@ export class GameWorld {
   readonly group = new THREE.Group()
   /** 障碍角度推进 + 命中判定（与视觉同源） */
   readonly obstacles = new ObstacleField()
+  /** 答题空气墙（视觉 + 开门淡出） */
+  readonly quizWalls = new QuizWalls()
   private readonly dynamics: DynamicEntry[] = []
   private readonly spinnerGroups: THREE.Group[] = []
   private readonly rollerGroups: THREE.Group[] = []
+  /** 答题墙碰撞体；解开一面就删一个 */
+  private readonly quizColliders: Array<RAPIER.Collider | null> = []
 
   constructor(private readonly physics: RAPIER.World) {
     this.group.add(
@@ -51,6 +57,7 @@ export class GameWorld {
       this.buildRamp(),
       this.buildFinishGate(),
       this.buildCrown(),
+      this.quizWalls.group,
     )
     this.buildSpinners()
     this.buildColliders()
@@ -72,12 +79,34 @@ export class GameWorld {
     for (let i = 0; i < this.rollerGroups.length; i++) {
       this.rollerGroups[i].rotation.x = this.obstacles.rollAngles[i]
     }
+    this.quizWalls.update(dt)
+  }
+
+  /** 解开一面答题墙：立刻删碰撞（人能从缝里穿过去），画面淡出 */
+  openQuizGate(index: number): void {
+    const collider = this.quizColliders[index]
+    if (collider) {
+      this.physics.removeCollider(collider, true)
+      this.quizColliders[index] = null
+    }
+    this.quizWalls.open(index)
+  }
+
+  /** 重开一局：墙全部立回去，碰撞体重建 */
+  resetQuizGates(): void {
+    this.quizWalls.reset()
+    for (let i = 0; i < this.quizColliders.length; i++) {
+      const old = this.quizColliders[i]
+      if (old) this.physics.removeCollider(old, true)
+      this.quizColliders[i] = this.createQuizCollider(i)
+    }
   }
 
   dispose(): void {
     this.dynamics.length = 0
     this.spinnerGroups.length = 0
     this.rollerGroups.length = 0
+    this.quizWalls.dispose()
     this.group.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.InstancedMesh) o.geometry.dispose()
     })
@@ -326,6 +355,21 @@ export class GameWorld {
         this.physics.createCollider(c)
       }
     }
+
+    // 答题空气墙：全宽、4.4 m 高，跳不过去；只有答对才移除
+    for (let i = 0; i < QUIZ_GATES.length; i++) {
+      this.quizColliders[i] = this.createQuizCollider(i)
+    }
+  }
+
+  private createQuizCollider(index: number): RAPIER.Collider {
+    const z = QUIZ_GATES[index].z
+    const desc = RAPIER.ColliderDesc.cuboid(QUIZ_WALL_WIDTH / 2, QUIZ_WALL_HEIGHT / 2, 0.15).setTranslation(
+      0,
+      QUIZ_WALL_HEIGHT / 2,
+      z,
+    )
+    return this.physics.createCollider(desc)
   }
 }
 
