@@ -18,7 +18,6 @@ export interface MaterialSet {
   mountainDeep: THREE.MeshLambertMaterial
   ground: THREE.MeshLambertMaterial
   cloud: THREE.MeshLambertMaterial
-  crowd: THREE.MeshLambertMaterial
 }
 
 let cached: MaterialSet | null = null
@@ -97,7 +96,6 @@ export function getMaterials(): MaterialSet {
     mountainDeep: new THREE.MeshLambertMaterial({ color: COLORS.mountainDeep }),
     ground: new THREE.MeshLambertMaterial({ color: COLORS.ground }),
     cloud: new THREE.MeshLambertMaterial({ color: COLORS.cloud }),
-    crowd: new THREE.MeshLambertMaterial({ color: 0xffffff }),
   }
   return cached
 }

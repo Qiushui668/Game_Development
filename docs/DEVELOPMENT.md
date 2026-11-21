@@ -51,6 +51,7 @@ Game_Development/
 │  ├─ game/
 │  │  ├─ core/   GameConfig / GameLoop / GameState / Game
 │  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World
+│  │  ├─ actor/  JellyBean（程序化果冻人，联机只换色不换几何）
 │  │  └─ utils/  MathUtils
 │  └─ types/     network.ts（协议冻结）
 ├─ backend/      阶段 B 的 Python 服务端
@@ -69,6 +70,7 @@ Game_Development/
 4. **共享材质**：`Materials.ts` 输出单例，禁止在循环里 `new THREE.MeshLambertMaterial`。
 5. **静态几何 `matrixAutoUpdate = false`**，减少每帧矩阵计算。
 6. **协议以 `src/types/network.ts` 为准**，改字段必须同步 `docs/NETWORK_PROTOCOL.md` 并升 `PROTOCOL_VERSION`。
+7. **起点角色数量 = 本局玩家数**（`MATCH.playerSlots`，单机为 1）。联机阶段只给每个玩家换颜色（`JellyBean.setColor` + `CROWD_COLORS`），不重建几何。
 
 ## 5. 已验证的坑
 

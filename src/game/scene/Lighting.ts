@@ -12,7 +12,8 @@ export class Lighting {
     sun.target.position.set(0, 0, -60)
     sun.castShadow = false
 
-    const hemi = new THREE.HemisphereLight(0xcfeaff, 0x7f8f7a, 1.15)
+    // 半球光：天空取淡青、地面取糖果粉做反射色。原来的泥绿地面色会把角色下半身压成橄榄色
+    const hemi = new THREE.HemisphereLight(0xdff3ff, 0xffb9dd, 1.25)
 
     this.group.add(sun, sun.target, hemi)
     scene.add(this.group)

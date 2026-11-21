@@ -34,9 +34,9 @@ export class SceneManager {
     this.scene.fog = new THREE.Fog(COLORS.fog, RENDER.fogNear, RENDER.fogFar)
 
     this.camera = new THREE.PerspectiveCamera(RENDER.fov, 16 / 9, RENDER.near, RENDER.far)
-    // M1 阶段用固定观察机位，站在起点人群后方沿赛道看过去；M2 换成 FollowCamera
-    this.camera.position.set(0, 11.5, 33)
-    this.camera.lookAt(0, 3.2, -50)
+    // M1 阶段用固定观察机位：起点角色在前景，视线沿赛道向下；M2 换成 FollowCamera
+    this.camera.position.set(0, 4.6, 12)
+    this.camera.lookAt(0, 2.4, -45)
 
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(container)

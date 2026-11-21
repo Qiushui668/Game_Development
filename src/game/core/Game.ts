@@ -67,6 +67,13 @@ export class Game {
         __PPR: {
           ready: true,
           getPerf: () => this.getPerf(),
+          /** 调试取景：性能探针用它拍特写，不参与玩法 */
+          setCamera: (pos: [number, number, number], target: [number, number, number]) => {
+            const cam = this.manager?.camera
+            if (!cam) return
+            cam.position.set(pos[0], pos[1], pos[2])
+            cam.lookAt(target[0], target[1], target[2])
+          },
         },
       })
     }

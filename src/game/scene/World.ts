@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { COLORS, CROWD_COLORS, TRACK } from '@/game/core/GameConfig'
+import { COLORS, CROWD_COLORS, MATCH, TRACK } from '@/game/core/GameConfig'
 import { getMaterials } from '@/game/scene/Materials'
+import { JellyBean } from '@/game/actor/JellyBean'
 
 interface DynamicEntry {
   mesh: THREE.Mesh
@@ -40,6 +41,7 @@ export class GameWorld {
   private readonly dynamics: DynamicEntry[] = []
   private readonly spinners: Spinner[] = []
   private readonly rollers: Array<{ group: THREE.Group; speed: number }> = []
+  private readonly actors: JellyBean[] = []
 
   constructor(private readonly physics: RAPIER.World) {
     this.group.add(
@@ -48,8 +50,7 @@ export class GameWorld {
       this.buildHurdles(),
       this.buildPins(),
       this.buildCrown(),
-      this.buildCrowd(),
-      this.spawnTestCube(),
+      this.buildSpawnActors(),
     )
     this.buildSpinners()
     this.buildColliders()
@@ -76,6 +77,8 @@ export class GameWorld {
     this.dynamics.length = 0
     this.spinners.length = 0
     this.rollers.length = 0
+    this.actors.forEach((a) => a.dispose())
+    this.actors.length = 0
     this.group.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.InstancedMesh) o.geometry.dispose()
     })
@@ -249,48 +252,26 @@ export class GameWorld {
     return mesh
   }
 
-  /** 起点人群：InstancedMesh 一次 draw，视觉糖豆人 */
-  private buildCrowd(): THREE.InstancedMesh {
-    const body = new THREE.SphereGeometry(0.52, 8, 6)
-    body.scale(1, 1.18, 0.92)
-    const leftFoot = new THREE.SphereGeometry(0.2, 6, 5)
-    leftFoot.translate(-0.22, -0.62, 0.14)
-    const rightFoot = new THREE.SphereGeometry(0.2, 6, 5)
-    rightFoot.translate(0.22, -0.62, 0.14)
+  /**
+   * 起点角色：数量 = 本局玩家数（MATCH.playerSlots）。
+   * 单机阶段只有 1 个；联机阶段按 CROWD_COLORS 给每个玩家分配颜色，几何复用同一套。
+   */
+  private buildSpawnActors(): THREE.Group {
+    const group = new THREE.Group()
+    group.name = 'SpawnActors'
 
-    const merged = mergeGeometries([body, leftFoot, rightFoot], false)
-    body.dispose()
-    leftFoot.dispose()
-    rightFoot.dispose()
-
-    const count = 54
-    const mesh = new THREE.InstancedMesh(merged, getMaterials().crowd, count)
-    mesh.name = 'Crowd'
-    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
-
-    const dummy = new THREE.Object3D()
-    const color = new THREE.Color()
-    let seed = 1337
-    const rand = (): number => {
-      seed = (seed * 1664525 + 1013904223) % 4294967296
-      return seed / 4294967296
-    }
-
+    const count = MATCH.playerSlots
     for (let i = 0; i < count; i++) {
-      const x = (rand() - 0.5) * (TRACK.width + 3)
-      const z = 13.5 - rand() * 11
-      const scale = 0.85 + rand() * 0.5
-      dummy.position.set(x, 0.55 * scale, z)
-      dummy.rotation.set(0, rand() * Math.PI * 2, 0)
-      dummy.scale.setScalar(scale)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
-      color.set(CROWD_COLORS[i % CROWD_COLORS.length])
-      mesh.setColorAt(i, color)
+      const bean = new JellyBean({
+        color: i === 0 ? COLORS.jellyBody : CROWD_COLORS[(i - 1) % CROWD_COLORS.length],
+        scale: 1.0,
+      })
+      const x = (i - (count - 1) / 2) * MATCH.slotSpacing
+      bean.group.position.set(x, 0, MATCH.spawnZ)
+      group.add(bean.group)
+      this.actors.push(bean)
     }
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-    return mesh
+    return group
   }
 
   /** 物理：起点平台 + 赛道 + 护栏 + 栏架。扫地杆与滚轴暂不给碰撞（阶段 C 处理） */
@@ -329,21 +310,6 @@ export class GameWorld {
         this.physics.createCollider(c)
       }
     }
-  }
-
-  /** M1 测试物体：一颗会落地的粉色方块，用来验证重力与物理-视觉同步 */
-  private spawnTestCube(): THREE.Mesh {
-    const size = 1.4
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), getMaterials().pin)
-    mesh.name = 'TestCube'
-    this.group.add(mesh)
-
-    const body = this.physics.createRigidBody(
-      RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 7, -14),
-    )
-    this.physics.createCollider(RAPIER.ColliderDesc.cuboid(size / 2, size / 2, size / 2), body)
-    this.dynamics.push({ mesh, body })
-    return mesh
   }
 }
 

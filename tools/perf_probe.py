@@ -163,6 +163,10 @@ async def run(args: argparse.Namespace) -> int:
 
             renderer = await cdp.eval_js(RENDERER_JS)
 
+            if args.eval_js:
+                await cdp.eval_js(args.eval_js)
+                await asyncio.sleep(0.4)
+
             samples = []
             end = time.time() + args.duration
             while time.time() < end:
@@ -205,6 +209,7 @@ def main() -> int:
     parser.add_argument("--ready-timeout", type=float, default=30.0)
     parser.add_argument("--json", default="")
     parser.add_argument("--png", default="")
+    parser.add_argument("--eval-js", default="", help="页面就绪后执行的 JS，例如调试取景")
     args = parser.parse_args()
     return asyncio.run(run(args))
 

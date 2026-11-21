@@ -80,6 +80,16 @@ export const CAMERA = {
   offsetYMin: 0.6,
 } as const
 
+/** 对局参数 */
+export const MATCH = {
+  /** 起点站位数 = 本局玩家数。单机阶段为 1；联机阶段改为房间容量，颜色按 CROWD_COLORS 分配 */
+  playerSlots: 1,
+  /** 多人时相邻站位间距（米） */
+  slotSpacing: 2.4,
+  /** 起跑线位置（Z 轴） */
+  spawnZ: 3.5,
+} as const
+
 /** 配色（糖果风，参考 Fall Guys 的低多边形饱和度） */
 export const COLORS = {
   /** 天空渐变的上下两端 */
@@ -120,6 +130,11 @@ export const COLORS = {
 
   /** M1 测试方块 */
   test: 0xff5c94,
+
+  /** 果冻人：身体 / 脸 / 眼睛 */
+  jellyBody: 0x2fe0d6,
+  jellyFace: 0xfdf3e6,
+  jellyEye: 0x10242c,
 } as const
 
 /** 起点人群的果冻小人配色 */
