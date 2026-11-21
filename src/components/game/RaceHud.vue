@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { RaceSnapshot } from '@/game/core/Game'
+import type { LeaderboardRow } from '@/types/network'
 
-const props = defineProps<{ race: RaceSnapshot | null }>()
+const props = defineProps<{
+  race: RaceSnapshot | null
+  /** 多人局：结算面板改显示全场名次，按钮改成回房间 */
+  online?: boolean
+  board?: LeaderboardRow[]
+}>()
 const emit = defineEmits<{ restart: [] }>()
 
 /** 3.87 s / 12.34 s / 1:05.42 三种长度自适应 */
@@ -23,6 +29,9 @@ const timeText = computed(() => fmt(props.race?.elapsedMs ?? 0))
 const bestText = computed(() => (props.race?.bestMs ? fmt(props.race.bestMs) : '—'))
 const progressPct = computed(() => `${Math.round((props.race?.progress ?? 0) * 100)}%`)
 const remaining = computed(() => Math.round(props.race?.remaining ?? 0))
+const rows = computed(() => props.board ?? [])
+const showBoard = computed(() => Boolean(props.online) && rows.value.length > 1)
+const againText = computed(() => (props.online ? '回房间' : '再跑一次'))
 </script>
 
 <template>
@@ -53,7 +62,16 @@ const remaining = computed(() => Math.round(props.race?.remaining ?? 0))
         <div class="title">FINISH</div>
         <div class="score">{{ fmt(race?.finishMs ?? 0) }}</div>
         <div class="line">最佳成绩 {{ bestText }}</div>
-        <button class="again" @click="emit('restart')">再跑一次</button>
+
+        <ol v-if="showBoard" class="board">
+          <li v-for="(row, i) in rows" :key="row.playerId" class="row">
+            <span class="rank">{{ i + 1 }}</span>
+            <span class="who" :style="{ color: row.color }">{{ row.nickname }}</span>
+            <span class="row-time">{{ row.timeMs === null ? '未完成' : fmt(row.timeMs) }}</span>
+          </li>
+        </ol>
+
+        <button class="again" @click="emit('restart')">{{ againText }}</button>
       </div>
     </div>
   </div>
@@ -212,6 +230,48 @@ const remaining = computed(() => Math.round(props.race?.remaining ?? 0))
   font-size: 14px;
   color: #eaf6ff;
   opacity: 0.9;
+}
+
+.board {
+  width: 100%;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+}
+
+.rank {
+  width: 20px;
+  flex: 0 0 20px;
+  font-weight: 900;
+  color: #fff07a;
+}
+
+.who {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.row-time {
+  font-weight: 700;
+  color: #eaf6ff;
+  opacity: 0.92;
 }
 
 .again {

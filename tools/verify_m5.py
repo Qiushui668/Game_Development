@@ -288,6 +288,10 @@ async def main() -> int:
 
             deadline = time.time() + 30
             while time.time() < deadline:
+                # B 阶段起首页先展示：自动化从"单人游戏"点进去
+                await cdp.eval_js(
+                    "(() => { const b = document.querySelector('.mode.solo'); if (b) b.click(); return !!b; })()"
+                )
                 ready = await cdp.eval_js("!!(window.__PPR && window.__PPR.attack)")
                 if ready:
                     break

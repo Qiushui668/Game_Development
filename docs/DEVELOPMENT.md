@@ -43,31 +43,37 @@ npm run preview      # 预览 dist
 Game_Development/
 ├─ index.html
 ├─ package.json / tsconfig.json / vite.config.ts
+├─ server/index.mjs         房间服务端（Node 22 + ws：房间 / 中继 / 裁判）
+├─ scripts/dev.mjs          一键联调：Vite(0.0.0.0) + 房间服务，打印局域网地址
 ├─ src/
-│  ├─ main.ts / App.vue
-│  ├─ views/GameView.vue
+│  ├─ main.ts / App.vue（首页 ⇄ 游戏 视图切换）
+│  ├─ views/     HomeView.vue（单人 / 多人入口）/ GameView.vue
 │  ├─ styles/global.css
-│  ├─ components/game/   GameCanvas.vue / DebugOverlay.vue / RaceHud.vue（计时·倒数·结算）/ QuizPanel.vue（F 提示·题面·冻结倒计时）
+│  ├─ components/
+│  │  ├─ home/   RoomLobby.vue（房间号·玩家位 2–8·房主开始·离开）
+│  │  └─ game/   GameCanvas.vue / DebugOverlay.vue / RaceHud.vue（计时·倒数·结算·多人榜单）/ QuizPanel.vue
+│  ├─ net/       RoomClient.ts（WebSocket 封装）/ roomStore.ts（房间响应式状态 + 游戏事件总线）
 │  ├─ game/
 │  │  ├─ core/   GameConfig / GameLoop / GameState / Game
 │  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World / QuizWalls（答题空气墙）
 │  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）
+│  │  ├─ net/    RemotePlayer（远端果冻人 + 100 ms 插值缓冲）
 │  │  ├─ physics/ ObstacleField（障碍布局 + 命中判定，纯 TS，服务端可复用）
 │  │  ├─ quiz/   QuizSystem（墙位 / 抽题 / 冻结读秒，纯 TS，服务端可复用）
-│  │  ├─ combat/ AttackSystem（出招状态机 + 轻击 3 次/重击 1 次击倒规则，纯 TS，服务端可复用）
+│  │  ├─ combat/ AttackSystem（出招状态机 + 轻击 3 次/重击 1 次击倒规则 + 判定距离，纯 TS）
 │  │  ├─ audio/  Music（单条 audio 循环 + 答题 duck）
 │  │  ├─ data/   questions.ts（由 `tools/build_questions.py` 从 Excel 生成，勿手改）
 │  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃/F/左右键攻击的边沿触发）
 │  │  └─ utils/  MathUtils
-│  └─ types/     network.ts（协议冻结）
+│  └─ types/     network.ts（协议 v2）
 ├─ public/audio/ danzai.mp3（背景音乐）
-├─ backend/      阶段 B 的 Python 服务端
 ├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
-├─ tools/        perf_probe.py（性能/截图探针）/ verify_m2.py（手感 8 项）/ verify_m3.py（击退 5 项）/ verify_m4.py（音乐 + 答题 12 项）/ verify_m5.py（攻击 9 项）/ verify_m6.py（护栏圆角顶 + 答题中断）/ build_questions.py（Excel → TS）
+├─ tools/        smoke_room.mjs（服务端协议 23 项）/ verify_m7.py（双客户端 18 项）/ perf_probe.py / verify_m2…m6.py / build_questions.py
 └─ .venv/
 ```
 
-> 注意：V1.1 文档 §4 原写 `py-party-run/` 子目录，实际因 `.venv` 在根目录，应用代码直接放在仓库根。以本节为准。
+> 阶段 B 的服务端改用 Node（与前端同仓同栈，`npm run lan` 一条命令起两进程），V1.1 原计划的 Python `websockets` 服务端不再使用。
+
 
 ## 4. 代码硬约束
 
@@ -113,6 +119,11 @@ Game_Development/
 | 冲击环在青粉棋盘上看不见 | 环色取了同色系（青/粉） | 单开 `COLORS.impactLight`（冷白）与 `impactHeavy`（暖黄） |
 | 圆角顶护栏还是能站上去沿护栏跑 | 胶囊+运动学控制器不模拟侧翻：无论圆柱顶还是 54° 屋脊，只要法线竖直就能一路"骑"下去（实测改完照样走到墙前） | 碰撞照旧用「方柱 + 54° 屋脊」（爬不上也站不平），再加一条玩法规则：脚底离地 > 0.4 m 且 \|x\| > 8.5 就朝赛道内滑落（`PlayerController.slipOffRail`） |
 | 被别的玩家打倒时答题还继续 | 答题是 Paused，没人管外界命中 | `Game.hitPlayer` 累计轻击/重击，倒地时 `interruptQuiz()`：题作废、墙不拆、退回 Racing、眩晕 1 s，HUD 闪"被击倒！" |
+| 联机命中判定"背后打人" / 明明在面前却打不到 | 角色朝向 `facing` **只跟着水平速度走**（静止帧保持上一朝向），相机转了身子不转 | 判定用 `state.yaw`（身体朝向）而不是相机朝向：攻击要打出命中，得先朝对方动一下；测试脚本里先 `stepInput` 一小段把身子转过去再瞬移 |
+| 轻击连打把对手推出攻击范围 | 轻击也用 `applyKnockback`（5.5 m/s + 0.9 s 硬直） | 拆出 `applyFlinch`：轻击只推 1.6 m/s、不进硬直；重击才用大击退，第三下倒地由 `applyStun` 清零横速 |
+| 双客户端自动化里第二个页面掉到 1 FPS | 同一个 Chrome 的后台标签被 rAF 降频 | 起**两个独立 Chrome 进程**（各自 profile / 调试端口 / 窗口位置），并带 `--disable-background-timer-throttling --disable-renderer-backgrounding --disable-features=CalculateNativeWinOcclusion` |
+| 开局倒计时两边不同步 | 各自从进入游戏那一刻开始倒数（init 快慢不同） | 服务器下发相对时长 `startsInMs`，3 s 后再广播 `game_started`，客户端收到就 `forceMatchStart()`；`init` 还没跑完时用 `pendingNetStart` 补发 |
+| 首页先展示后老验收脚本全挂 | `window.__PPR` 只在进游戏后才有 | `verify_m2…m6` 在等待循环里先点一次 `.mode.solo`（见各脚本注释） |
 
 ## 6. Git
 

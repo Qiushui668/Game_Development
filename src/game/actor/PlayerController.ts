@@ -204,7 +204,18 @@ export class PlayerController {
     }
   }
 
-  /** 被障碍击中：打断输入、给一个水平击退 + 短促上抛。返回是否真的生效 */
+  /**
+   * 被玩家轻击推一下：只有一点点位移和一个短上抛，不进硬直。
+   * 第三下累计倒地时才由 applyStun 接管（那里会把横速清零）。
+   */
+  applyFlinch(dirX: number, dirZ: number, speed: number): void {
+    this.vx = dirX * speed
+    this.vz = dirZ * speed
+    this.vy = Math.max(this.vy, 0.45)
+    this.grounded = false
+  }
+
+
   applyKnockback(kb: Knockback): boolean {
     if (this.hitCooldownT > 0) return false
     this.vx = kb.dirX * kb.speed

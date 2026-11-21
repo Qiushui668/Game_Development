@@ -1,6 +1,7 @@
-# 网络协议（A-05 冻结）
+# 网络协议（阶段 B：局域网联机）
 
 > 唯一事实来源：`src/types/network.ts`。本文档解释设计意图，字段定义以代码为准；两者必须同步修改。
+> 服务端实现：`server/index.mjs`（Node 22 + `ws`，零业务框架）。
 
 ## 1. 权限模型：房间 + 中继 + 裁判
 
@@ -8,84 +9,94 @@
 
 | 职责 | 说明 |
 | --- | --- |
-| 房间 | 创建/加入/离开、容量控制、房主转移、状态机（大厅 → 倒计时 → 比赛中 → 结算） |
-| 中继 | 把 `player_state` 广播给房间内其他玩家，20 Hz |
-| 裁判 | 服务器单调时钟完成计时、校验 checkpoint 顺序递增、记录掉落次数 |
+| 房间 | 创建/加入/离开、容量 2–8、房主转移、状态机（大厅 → 倒计时 → 比赛中 → 回大厅） |
+| 中继 | 把 `player_state` 转发给房间内其他玩家，20 Hz；转发 `attack` / `attack_hit` / `take_hit` |
+| 裁判 | 服务器单调时钟算完赛时间、校验 checkpoint 顺序递增、统计掉落次数、出榜单 |
 
-客户端位置数据以**客户端权威**上报。这是 V1.1 §12 明确接受的取舍：不做服务端复算，换取实现成本与服务器负载。因此**不做反作弊**，联机仅限熟人间使用。
+客户端位置数据以**客户端权威**上报，命中判定也在攻击者本地算（够近 + 面朝对方 + 落差不大），服务器只把 `attack_hit` 转发给被打的人。这是 V1.1 §12 明确接受的取舍：不做服务端复算，换取实现成本与服务器负载。因此**不做反作弊**，联机仅限熟人间使用。
 
 ## 2. 传输
 
 | 阶段 | 传输 | 端点 |
 | --- | --- | --- |
-| 阶段 B（局域网 2–5 人） | 原始 WebSocket（`websockets` 库） | `ws://<host>:8000/ws` |
-| 阶段 G（上线 2–8 人） | FastAPI 包一层反向代理 + 鉴权 | `wss://<domain>/ws` |
+| B（局域网 2–8 人） | 原始 WebSocket（Node `ws`） | `ws://<host>:8000/ws` |
+| C（上线） | 反向代理 + 鉴权 | `wss://<domain>/ws` |
 
-消息编码：JSON 对象，必须有 `type` 字段。字段名刻意压短（`p` / `r` / `s` / `a`）以在 20 Hz 下省带宽。
+消息编码：JSON，必须有 `type`。位置包字段刻意压短（`p` / `r` / `s` / `a`）以在 20 Hz 下省带宽。
 
-协议版本 `PROTOCOL_VERSION = 1`，客户端握手时校验，不匹配直接拒绝。
+协议版本 `PROTOCOL_VERSION = 2`（v1 只有单机骨架；v2 加了 `hello`、攻击同步与 `back_to_lobby`）。握手时服务器下发 `hello`，版本不匹配由客户端拒绝进入游戏。
 
 ## 3. 客户端 → 服务器
 
 | type | 载荷 | 频率 | 说明 |
 | --- | --- | --- | --- |
-| `create_room` | `nickname`, `color` | 一次 | 创建房间，创建者成为 host |
-| `join_room` | `code`, `nickname`, `color` | 一次 | 加入已有房间 |
-| `leave_room` | — | 按需 | 主动离开 |
-| `start_game` | — | 一次 | 仅 host 有效，否则回 `NOT_HOST` |
-| `player_state` | `payload: PlayerStatePayload` | 20 Hz | 位置/朝向/状态/动画相位 |
+| `create_room` | `nickname`, `color` | 一次 | 创建房间，创建者成为 host，房间号由服务器分配 |
+| `join_room` | `code`, `nickname`, `color` | 一次 | 加入已有房间；比赛已开始则拒绝 |
+| `leave_room` | — | 按需 | 主动离开，房主离开自动转移 |
+| `start_game` | — | 一次 | 仅 host 有效且人数 ≥ 2，否则回 `NOT_HOST` / `NOT_ENOUGH_PLAYERS` |
+| `back_to_lobby` | — | 按需 | 结算后回大厅，全房重置成绩等下一局 |
+| `player_state` | `payload: PlayerStatePayload` | 20 Hz | 位置/朝向/状态/速度归一化 |
+| `attack` | `kind: 'light'\|'heavy'`, `side` | 事件触发 | 出招动画广播，别人照着播 |
+| `attack_hit` | `targetId`, `kind`, `side`, `x`, `z` | 事件触发 | 攻击者本地判定打到了谁 |
 | `checkpoint` | `index`, `t` | 事件触发 | 顺序必须递增，跳号被拒 |
-| `finish` | `t` | 一次 | 到达终点 |
-| `ping` | `t` | 2 Hz | 用于估算 RTT |
+| `finish` | `t` | 一次 | 到达终点；官方时间由服务器算 |
+| `ping` | `t` | 2 Hz | 估算 RTT |
 
 `PlayerStatePayload`：
 
 ```ts
-{ t: number;              // 客户端时间戳 ms
+{ t: number;              // 客户端时间戳 ms（只用于调试，服务器不采信）
   p: [x, y, z];           // 位置
-  r: number;              // yaw 弧度
+  r: number;              // yaw 弧度（角色朝向，跟着移动方向走）
   s: 'idle'|'run'|'jump'|'fall'|'knock'|'respawn'|'finish';
-  a: number }             // 动画相位 0–1
+  a: number }             // 速度归一化 0–1，远端据此算跑步动画幅度
 ```
 
 ## 4. 服务器 → 客户端
 
 | type | 载荷 | 说明 |
 | --- | --- | --- |
-| `room_state` | `code`, `hostId`, `capacity`, `players[]` | 全量快照，进房/有人变动时下发 |
-| `player_joined` | `player` | 增量 |
-| `player_left` | `playerId` | 增量 |
-| `countdown` | `startsAt`, `seconds` | 开局倒计时（服务器时钟） |
-| `game_started` | `startsAt` | 正式开跑 |
-| `player_state` | `playerId`, `payload` | 其他玩家状态，20 Hz 中继，不回发给发送者 |
+| `hello` | `id`, `protocol` | 连上即下发，客户端拿 `id` 认自己 |
+| `room_state` | `code`, `hostId`, `capacity`, `players[]` | 全量快照，进房/有人变动时下发（站位号在此重排） |
+| `player_left` | `playerId` | 某人断开 |
+| `countdown` | `seconds`, `startsInMs` | 开跑倒计时，**相对时长**下发（见 §6） |
+| `game_started` | — | 倒计时结束，全场同一时刻起跑 |
+| `player_state` | `playerId`, `payload` | 其他人的状态，20 Hz 中继，不回发给发送者 |
+| `attack_played` | `playerId`, `kind`, `side` | 别人出招，播动画 |
+| `take_hit` | `fromId`, `kind`, `x`, `z` | **你被打中了**：本地结算眩晕、击退与答题中断 |
 | `checkpoint_updated` | `playerId`, `index` | 裁判确认后的进度 |
-| `player_finished` | `playerId`, `timeMs` | 服务器计算完成时间 |
-| `leaderboard` | `rows[]` | 结算榜 |
+| `player_finished` | `playerId`, `timeMs` | 服务器计算的完成时间 |
+| `leaderboard` | `rows[]` | 名次（未完赛 `timeMs = null`，排最后） |
+| `back_to_lobby` | — | 回到大厅 |
 | `error` | `code`, `message` | 见下表 |
+
+`PlayerBrief`：`id / nickname / color('#rrggbb') / host / finished / slot(0..7)`。`slot` 决定起跑线站位，客户端按 `(slot - (n-1)/2) * 2.4 m` 落位。
 
 ## 5. 错误码
 
 | code | 场景 |
 | --- | --- |
 | `ROOM_NOT_FOUND` | 房间码不存在 |
-| `ROOM_FULL` | 已达 `capacity` |
+| `ROOM_FULL` | 已达 8 人 |
 | `GAME_IN_PROGRESS` | 比赛中禁止加入 |
 | `NOT_HOST` | 非房主发 `start_game` |
+| `NOT_ENOUGH_PLAYERS` | 人数 < 2 时开跑 |
 | `BAD_MESSAGE` | 字段缺失/类型错误/未知 type |
+| `BAD_PROTOCOL` | 协议版本不匹配 |
 
 ## 6. 时间与时钟
 
-- **所有比赛计时使用服务器单调时钟**（`time.monotonic()`），不使用系统墙钟，避免调时。
-- 客户端只上报相对时间戳，服务器不采信客户端时刻。
-- 倒计时以 `startsAt` 下发绝对服务器时刻，客户端自行换算成本地偏移，不信任本地时钟。
+- **比赛计时用服务器单调时钟**（`performance.now()`），不用墙钟，避免调时。
+- 倒计时不下发绝对时刻，而是下发 `startsInMs`（还剩多少毫秒）+ `seconds`。两台机器的墙钟本来就不同，相对时长让客户端各自倒计时即可，开跑的真正对齐靠服务器在 3 s 后广播 `game_started`。
+- 客户端收到 `player_state` 时用**本地到达时刻**打戳，渲染时按 100 ms 延迟插值（`RemotePlayer`），因此不依赖两台机器的时钟同步。
 
-## 7. 容量与阶段
+## 7. 战斗同步（B1）
 
-| 阶段 | 容量 | 状态机 |
-| --- | --- | --- |
-| B 局域网 | `ROOM_CAPACITY = 5` | 大厅 → 倒计时 3 s → 比赛 → 结算 |
-| G 上线 | 8（改常量并升 `PROTOCOL_VERSION`） | 同上，另加鉴权与限流 |
+- 出招：本地 `AttackSystem` 决定命中帧（轻击 0.16 s / 重击 1.0 s），到达命中帧时本地先算候选目标（`COMBAT_RULES.lightReach 2.1` / `heavyReach 2.9` / 半角 65° / 落差 2.2 m），命中则发 `attack_hit`。
+- 服务器只校验 `targetId` 在房间内且房间处于比赛中，然后把 `take_hit` 发给被打的人 —— **结算在被打端**：轻击累计 3 次（连击窗口 1.6 s）、重击 1 次 → 倒地眩晕 1 s，正在答题则中断答题。
+- 轻击只推一小步（`applyFlinch`，1.6 m/s，不进硬直），重击是大击退（8 m/s + 0.9 s 硬直，倒地再叠到 1 s），所以连续轻击不会把人推出命中范围。
+- 倒地状态通过 `player_state.s = 'knock'` 传出去，远端照样播"四脚朝天"的失控姿态。
 
 ## 8. 断线与重连
 
-阶段 B 不做重连：连接断开即 `player_left`，其余玩家继续。阶段 G 再评估是否引入 session 恢复（需升协议版本）。
+阶段 B 不做重连：连接断开即 `player_left`，房主自动转移给剩下的人，其余玩家继续。阶段 C 再评估 session 恢复（需升协议版本）。

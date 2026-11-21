@@ -21,6 +21,13 @@ export const COMBAT_RULES = {
   /** 轻击计数多久没续上就清零 */
   comboWindow: 1.6,
   knockdownSeconds: 1,
+  /** 字面判定距离（米）：从脚底到对方脚底的平面距离 */
+  lightReach: 2.1,
+  heavyReach: 2.9,
+  /** 命中扇形的半角（度）：只有大致面朝对方才算打到，避免背后隔空命中 */
+  hitHalfAngleDeg: 65,
+  /** 竖向允许落差（米）：不在同一层不算命中 */
+  hitHeightTolerance: 2.2,
 } as const
 
 /**

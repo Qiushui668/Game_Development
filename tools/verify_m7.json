@@ -1,0 +1,97 @@
+{
+  "url": "http://localhost:5173/",
+  "collectedAt": "2026-11-21 18:59:46",
+  "pass": true,
+  "results": [
+    {
+      "name": "首页展示单人 / 多人两个入口",
+      "ok": true,
+      "detail": "[\"单人游戏\", \"多人游戏\"]"
+    },
+    {
+      "name": "创建房间得到 4 位房间号",
+      "ok": true,
+      "detail": "code=8459"
+    },
+    {
+      "name": "只有 1 人时开始按钮禁用（最少 2 人）",
+      "ok": true,
+      "detail": "disabled=True"
+    },
+    {
+      "name": "两人都在房间里（2 / 8）",
+      "ok": true,
+      "detail": "count=2 / 8 人"
+    },
+    {
+      "name": "第二人是加入者（不是房主）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "两个客户端都已联机（各看到 1 个远端）",
+      "ok": true,
+      "detail": "p1 remotes=1 p2 remotes=1"
+    },
+    {
+      "name": "站位号不重复",
+      "ok": true,
+      "detail": "slot 0 / 1"
+    },
+    {
+      "name": "服务器开跑令让两边同时进入 Racing",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "房主跑动被第二台机器看到（远端位置更新）",
+      "ok": true,
+      "detail": "z 3.50 -> -6.61"
+    },
+    {
+      "name": "房主已经面向对手（朝向跟着移动走）",
+      "ok": true,
+      "detail": "yaw=3.11"
+    },
+    {
+      "name": "重击前对面站着没被打",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "重击一次就让对面倒地眩晕",
+      "ok": true,
+      "detail": "{\"lightHits\": 0, \"knockdowns\": 1, \"stunLeft\": 0.7499999999999992, \"down\": true}"
+    },
+    {
+      "name": "轻击三次才让对面倒地",
+      "ok": true,
+      "detail": "knockdowns 1 -> 2"
+    },
+    {
+      "name": "答题中被打倒会中断答题",
+      "ok": true,
+      "detail": "phase=off interrupted=True"
+    },
+    {
+      "name": "中断后回到 Racing，题面不再占屏",
+      "ok": true,
+      "detail": "race=Racing"
+    },
+    {
+      "name": "结算面板列出两人成绩",
+      "ok": true,
+      "detail": "[\"1房主甲11.44 s\", \"2玩家乙13.20 s\"]"
+    },
+    {
+      "name": "成绩是服务器算的完赛时间（都有效）",
+      "ok": true,
+      "detail": "[\"11.44 s\", \"13.20 s\"]"
+    },
+    {
+      "name": "双人联机下帧率仍 >= 30",
+      "ok": true,
+      "detail": "fps=59.4 p99=16.9 ms draw=46"
+    }
+  ]
+}

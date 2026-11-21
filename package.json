@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:vite": "vite",
+    "server": "node server/index.mjs",
+    "lan": "node scripts/dev.mjs",
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview"
@@ -12,7 +15,8 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
     "three": "^0.187.0",
-    "vue": "^3.5.46"
+    "vue": "^3.5.46",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@types/three": "^0.187.0",

@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import { MATCH, PHYSICS, TRACK } from '@/game/core/GameConfig'
+import { MATCH, PHYSICS, PLAYER, TRACK } from '@/game/core/GameConfig'
 import { GameLoop } from '@/game/core/GameLoop'
 import { RaceStateMachine, type RaceState } from '@/game/core/GameState'
 import { SceneManager } from '@/game/scene/SceneManager'
@@ -8,7 +8,7 @@ import { Environment } from '@/game/scene/Environment'
 import { GameWorld } from '@/game/scene/World'
 import { disposeMaterials } from '@/game/scene/Materials'
 import { Input } from '@/game/input/Input'
-import { PlayerController } from '@/game/actor/PlayerController'
+import { PlayerController, type PlayerState } from '@/game/actor/PlayerController'
 import { JellyBean } from '@/game/actor/JellyBean'
 import { FollowCamera } from '@/game/actor/FollowCamera'
 import { percentile } from '@/game/utils/MathUtils'
@@ -20,6 +20,21 @@ import {
   HitTracker,
   type AttackKind,
 } from '@/game/combat/AttackSystem'
+import { RemotePlayer } from '@/game/net/RemotePlayer'
+import type { ClientEvent, NetAttackKind, PlayerStatePayload } from '@/types/network'
+
+/** 多人局接入点：由 GameCanvas 把房间连接包成这几个回调交给 Game */
+export interface NetConfig {
+  /** 服务器分配的玩家 id */
+  selfId: string
+  /** 自己的站位序号 0..7 */
+  slot: number
+  /** 房间人数（决定起跑线站位宽度） */
+  playerCount: number
+  /** 其他人：id + 色号 + 站位 */
+  peers: { id: string; color: string; slot: number }[]
+  send: (ev: ClientEvent) => void
+}
 
 export interface PerfSnapshot {
   fps: number
@@ -122,7 +137,19 @@ export class Game {
   private ready = false
   private disposed = false
 
-  constructor(private readonly container: HTMLElement) {}
+  /** 多人局：其他人一个果冻人一个，位置完全由网络驱动 */
+  private readonly remotes = new Map<string, RemotePlayer>()
+  /** 状态上报节流：20 Hz */
+  private netAccum = 0
+  /** 自己已经向服务器报过完赛（防止重复上报） */
+  private netFinishSent = false
+  /** 服务器开跑令比 init 先到：init 末尾补发 */
+  private pendingNetStart = false
+
+  constructor(
+    private readonly container: HTMLElement,
+    private readonly net: NetConfig | null = null,
+  ) {}
 
   get isReady(): boolean {
     return this.ready
@@ -146,16 +173,25 @@ export class Game {
     manager.scene.add(world.group)
 
     // 玩家：脚底从 0.35 m 落下，避免第一帧就卡在地面里
-    const spawn = { x: 0, y: 0.35, z: MATCH.spawnZ }
+    // 多人局按站位号横向错开（站位宽度随人数变化，8 人时最外侧 ±8.4 m，仍在赛道内）
+    const spawn = { x: this.slotX(this.net?.slot ?? 0, this.net?.playerCount ?? 1), y: 0.35, z: MATCH.spawnZ }
     this.spawnX = spawn.x
     this.spawnY = spawn.y
     this.spawnZ = spawn.z
     const player = new PlayerController(physics, spawn)
     const jelly = new JellyBean()
+    if (this.net) jelly.setColor(0x2fe0d6)
     jelly.group.position.set(spawn.x, spawn.y, spawn.z)
     manager.scene.add(jelly.group)
     this.player = player
     this.jelly = jelly
+
+    // 其他人：一个玩家一个果冻人，只换色，几何共用
+    if (this.net) {
+      for (const peer of this.net.peers) {
+        this.addRemote(peer)
+      }
+    }
 
     this.followCam = new FollowCamera(manager.camera)
     this.input = new Input(manager.canvas)
@@ -170,6 +206,10 @@ export class Game {
     this.loop = new GameLoop(PHYSICS.fixedStep, PHYSICS.maxSubSteps, this.onFixedUpdate, this.onRender)
     this.ready = true
     this.startCountdown()
+    if (this.pendingNetStart) {
+      this.pendingNetStart = false
+      this.forceMatchStart()
+    }
 
     if (import.meta.env.DEV) {
       Object.assign(window, {
@@ -263,6 +303,24 @@ export class Game {
           /** 自动化验收用：模拟"被别的玩家打中"（联机前的规则验证入口） */
           hitPlayer: (kind: AttackKind) => this.hitPlayer(kind),
           getSelfHits: () => this.selfHits.snapshot(),
+          /** 自动化验收用：多人局信息（关闭联机时为 null） */
+          getNet: () =>
+            this.net
+              ? {
+                  selfId: this.net.selfId,
+                  slot: this.net.slot,
+                  playerCount: this.net.playerCount,
+                  peers: this.net.peers.map((p) => p.id),
+                  remotes: [...this.remotes.entries()].map(([id, r]) => ({ id, ...r.position })),
+                  finishSent: this.netFinishSent,
+                }
+              : null,
+          /** 自动化验收用：服务器发令开跑 */
+          forceStart: () => this.forceMatchStart(),
+          /** 自动化验收用：模拟收到别人的位置包 / 出招 / 命中 */
+          pushRemoteState: (id: string, payload: PlayerStatePayload) => this.applyRemoteState(id, payload),
+          remoteAttack: (id: string, kind: NetAttackKind, side: number) => this.playRemoteAttack(id, kind, side),
+          takeHit: (kind: NetAttackKind, fromX: number, fromZ: number) => this.receiveNetHit(kind, fromX, fromZ),
           /** 自动化验收用：跳过 3 秒倒数，直接进入 Racing */
           startNow: () => {
             if (this.race.state === 'Countdown') {
@@ -294,7 +352,132 @@ export class Game {
     this.finishMs = null
     this.resultDelay = 0
     this.countdownLeft = COUNTDOWN_SECONDS
+    this.netFinishSent = false
   }
+
+  /** 起跑线站位：按人数居中排开，最外侧不超过赛道内缘 */
+  private slotX(slot: number, count: number): number {
+    if (count <= 1) return 0
+    const half = (count - 1) / 2
+    const x = (slot - half) * MATCH.slotSpacing
+    const limit = TRACK.width / 2 - PLAYER.radius - 0.3
+    return Math.max(-limit, Math.min(limit, x))
+  }
+
+  /** 加一个远程玩家（换色不重建几何） */
+  private addRemote(peer: { id: string; color: string; slot: number }): void {
+    if (this.remotes.has(peer.id) || !this.manager) return
+    const parsed = Number.parseInt(peer.color.replace('#', ''), 16)
+    const color = Number.isFinite(parsed) ? parsed : 0xff3f8b
+    const x = this.slotX(peer.slot, this.net?.playerCount ?? 1)
+    const remote = new RemotePlayer(peer.id, color, [x, 0.35, MATCH.spawnZ])
+    this.manager.scene.add(remote.jelly.group)
+    this.remotes.set(peer.id, remote)
+  }
+
+  /** 有人离开或重排站位：把他的角色拿掉 */
+  removeRemote(playerId: string): void {
+    const remote = this.remotes.get(playerId)
+    if (!remote) return
+    this.manager?.scene.remove(remote.jelly.group)
+    remote.dispose()
+    this.remotes.delete(playerId)
+  }
+
+  /** 收到别人的位置包（20 Hz） */
+  applyRemoteState(playerId: string, payload: PlayerStatePayload): void {
+    this.remotes.get(playerId)?.push(payload, performance.now())
+  }
+
+  /** 别人出招：照着播动画 */
+  playRemoteAttack(playerId: string, kind: NetAttackKind, side: number): void {
+    this.remotes.get(playerId)?.playAttack(kind, side)
+  }
+
+  /**
+   * 自己被别人打中（由服务器转发）。规则与单机一致：轻击 3 次 / 重击 1 次倒地，
+   * 倒地眩晕 1 s，正在答题则直接中断；另按来向给一点击退，看得出是被谁打的。
+   */
+  receiveNetHit(kind: NetAttackKind, fromX: number, fromZ: number): { down: boolean; interrupted: boolean } {
+    const st = this.player?.read()
+    if (this.player && st) {
+      const dx = st.x - fromX
+      const dz = st.z - fromZ
+      const len = Math.hypot(dx, dz) || 1
+      const dirX = dx / len
+      const dirZ = dz / len
+      // 轻击只推一小步（不进硬直），重击才是大击退 + 硬直
+      if (kind === 'heavy') {
+        this.player.applyKnockback({ dirX, dirZ, speed: 8, hop: 2.4 })
+      } else {
+        this.player.applyFlinch(dirX, dirZ, 1.6)
+      }
+    }
+    return this.hitPlayer(kind)
+  }
+
+  /** 服务器发令开跑：本地倒数立刻收尾，全场同一帧起跑 */
+  forceMatchStart(): void {
+    // Game 还没 init 完（RAPIER 编译中）时先记下来，等 init 末尾再补
+    if (this.race.state === 'Menu' || this.race.state === 'Loading') {
+      this.pendingNetStart = true
+      return
+    }
+    if (this.race.state === 'Countdown') {
+      this.countdownLeft = 0
+      this.raceTimeMs = 0
+      this.race.set('Racing')
+    }
+  }
+
+  /** 打包本机状态：20 Hz 上报，字段按协议压短 */
+  private buildStatePayload(st: PlayerState): PlayerStatePayload {
+    const s: PlayerStatePayload['s'] = st.stunned
+      ? 'knock'
+      : !st.grounded
+        ? st.verticalSpeed > 0
+          ? 'jump'
+          : 'fall'
+        : st.speed > 0.4
+          ? 'run'
+          : 'idle'
+    return {
+      t: Math.round(performance.now()),
+      p: [st.x, st.y, st.z],
+      r: st.yaw,
+      s,
+      a: Math.min(1, st.speed / PLAYER.sprintSpeed),
+    }
+  }
+
+  /**
+   * 命中判定：本地算出打了谁，再把 targetId 报给服务器转发。
+   * 判定只认"够近 + 大致面朝对方 + 落差不大"，避免背后隔空打人。
+   */
+  private resolveNetHit(kind: AttackKind): void {
+    const net = this.net
+    const st = this.player?.read()
+    if (!net || !st || this.remotes.size === 0) return
+    const reach = kind === 'heavy' ? COMBAT_RULES.heavyReach : COMBAT_RULES.lightReach
+    const cosLimit = Math.cos((COMBAT_RULES.hitHalfAngleDeg * Math.PI) / 180)
+    const fx = -Math.sin(st.yaw)
+    const fz = -Math.cos(st.yaw)
+    let best: { id: string; dist: number } | null = null
+    for (const [id, remote] of this.remotes) {
+      const p = remote.position
+      const dx = p.x - st.x
+      const dz = p.z - st.z
+      if (Math.abs(p.y - st.y) > COMBAT_RULES.hitHeightTolerance) continue
+      const dist = Math.hypot(dx, dz)
+      if (dist > reach || dist < 1e-4) continue
+      if ((fx * dx + fz * dz) / dist < cosLimit) continue
+      if (!best || dist < best.dist) best = { id, dist }
+    }
+    if (!best) return
+    this.remotes.get(best.id)?.impact(kind)
+    net.send({ type: 'attack_hit', targetId: best.id, kind, side: this.attack.side, x: st.x, z: st.z })
+  }
+
 
   /** 重新开一局：复位角色、障碍角度、答题墙与计时 */
   restart(): void {
@@ -332,13 +515,15 @@ export class Game {
     if (this.race.state !== 'Racing') return false
     if (!this.attack.start(kind)) return false
     this.jelly?.playAttack(kind, this.attack.side)
+    this.net?.send({ type: 'attack', kind, side: this.attack.side })
     return true
   }
 
-  /** 命中帧：闪冲击环；命中判定先记在规则靶子上（联机时改为对目标玩家） */
+  /** 命中帧：闪冲击环；单机记在规则靶子上，多人局再判一次打到谁 */
   private onAttackHit(kind: AttackKind): void {
     this.jelly?.impact(kind)
     this.practiceTarget.apply(kind)
+    this.resolveNetHit(kind)
   }
 
   /**
@@ -466,6 +651,11 @@ export class Game {
       this.jelly.dispose()
     }
     this.jelly = null
+    for (const remote of this.remotes.values()) {
+      this.manager?.scene.remove(remote.jelly.group)
+      remote.dispose()
+    }
+    this.remotes.clear()
     this.player = null
     this.followCam = null
 
@@ -584,10 +774,24 @@ export class Game {
       player.halt()
       this.debugAxes = null
       if (this.bestMs === null || this.finishMs < this.bestMs) this.bestMs = this.finishMs
+      // 多人局：官方时间由服务器算，这里只报"我到了"
+      if (this.net && !this.netFinishSent) {
+        this.netFinishSent = true
+        this.net.send({ type: 'finish', t: this.finishMs })
+      }
     }
     if (this.race.state === 'Finished') {
       this.resultDelay += h
       if (this.resultDelay >= RESULT_DELAY) this.race.set('Result')
+    }
+
+    // 位置上报：20 Hz，跑动/静止都发（远端靠它插值，停发会让人物卡住）
+    if (this.net) {
+      this.netAccum += h
+      if (this.netAccum >= 0.05) {
+        this.netAccum = 0
+        this.net.send({ type: 'player_state', payload: this.buildStatePayload(st) })
+      }
     }
 
     // 答题 Paused 期间世界也一起冻结：倒计时读秒时障碍不转、扫地杆不扫
@@ -610,9 +814,15 @@ export class Game {
       this.followCam.update(dtReal, state.x, state.y, state.z)
     }
 
+    if (this.remotes.size > 0) {
+      const nowMs = performance.now()
+      for (const remote of this.remotes.values()) remote.update(dtReal, nowMs)
+    }
+
     if (this.manager && this.environment) {
       this.environment.followCamera(this.manager.camera)
     }
     this.manager?.render()
   }
 }
+

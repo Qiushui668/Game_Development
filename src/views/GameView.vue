@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { defineProps, defineEmits } from 'vue'
 import GameCanvas from '@/components/game/GameCanvas.vue'
+
+defineProps<{ online: boolean }>()
+const emit = defineEmits<{ exit: [] }>()
 </script>
 
 <template>
   <div class="view">
-    <GameCanvas />
+    <GameCanvas :online="online" @exit="emit('exit')" />
   </div>
 </template>
 

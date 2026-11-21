@@ -1,9 +1,19 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
-import { Game, type PerfSnapshot, type QuizSnapshot, type RaceSnapshot } from '@/game/core/Game'
+import {
+  Game,
+  type NetConfig,
+  type PerfSnapshot,
+  type QuizSnapshot,
+  type RaceSnapshot,
+} from '@/game/core/Game'
 import DebugOverlay from '@/components/game/DebugOverlay.vue'
 import RaceHud from '@/components/game/RaceHud.vue'
 import QuizPanel from '@/components/game/QuizPanel.vue'
+import { backToLobby, onGameEvent, room, roomClient } from '@/net/roomStore'
+
+const props = defineProps<{ online: boolean }>()
+const emit = defineEmits<{ exit: [] }>()
 
 const host = ref<HTMLElement | null>(null)
 const stats = shallowRef<PerfSnapshot | null>(null)
@@ -14,14 +24,55 @@ const error = ref<string | null>(null)
 let game: Game | null = null
 let timer = 0
 let raceTimer = 0
+let unsubGame: (() => void) | null = null
+
+/** 把当前房间状态包成 Game 认识的最小网网络接口 */
+function buildNet(): NetConfig | null {
+  if (!props.online) return null
+  const me = room.players.find((p) => p.id === room.selfId)
+  return {
+    selfId: room.selfId,
+    slot: me?.slot ?? 0,
+    playerCount: Math.max(1, room.players.length),
+    peers: room.players
+      .filter((p) => p.id !== room.selfId)
+      .map((p) => ({ id: p.id, color: p.color, slot: p.slot })),
+    send: (ev) => roomClient.send(ev),
+  }
+}
 
 onMounted(async () => {
   if (!host.value) return
   try {
-    const instance = new Game(host.value)
+    const instance = new Game(host.value, buildNet())
     game = instance
     await instance.init()
     instance.start()
+
+    if (props.online) {
+      unsubGame = onGameEvent((ev) => {
+        switch (ev.type) {
+          case 'player_state':
+            instance.applyRemoteState(ev.playerId, ev.payload)
+            break
+          case 'attack_played':
+            instance.playRemoteAttack(ev.playerId, ev.kind, ev.side)
+            break
+          case 'take_hit':
+            instance.receiveNetHit(ev.kind, ev.x, ev.z)
+            break
+          case 'game_started':
+            instance.forceMatchStart()
+            break
+          case 'player_left':
+            instance.removeRemote(ev.playerId)
+            break
+          default:
+            break
+        }
+      })
+    }
+
     // 低频拉快照（4 Hz）：游戏循环不触碰 Vue 响应式
     timer = window.setInterval(() => {
       stats.value = instance.getPerf()
@@ -37,6 +88,11 @@ onMounted(async () => {
 })
 
 function restartRace(): void {
+  if (props.online) {
+    backToLobby()
+    emit('exit')
+    return
+  }
   game?.restart()
 }
 
@@ -47,6 +103,8 @@ function answerQuiz(index: number): void {
 onBeforeUnmount(() => {
   window.clearInterval(timer)
   window.clearInterval(raceTimer)
+  unsubGame?.()
+  unsubGame = null
   game?.dispose()
   game = null
 })
@@ -55,7 +113,16 @@ onBeforeUnmount(() => {
 <template>
   <div class="canvas-host" ref="host">
     <div v-if="error" class="error">初始化失败：{{ error }}</div>
-    <RaceHud :race="race" @restart="restartRace" />
+
+    <div v-if="online" class="room-badge">房间 {{ room.code }} · {{ room.players.length }} 人</div>
+    <button v-if="online" class="exit" @click="emit('exit')">退出房间</button>
+
+    <RaceHud
+      :race="race"
+      :online="online"
+      :board="online ? room.board : []"
+      @restart="restartRace"
+    />
     <QuizPanel :quiz="quiz" @answer="answerQuiz" />
     <DebugOverlay :stats="stats" />
   </div>
@@ -80,5 +147,40 @@ onBeforeUnmount(() => {
   font-size: 15px;
   line-height: 1.5;
   color: #fff;
+}
+
+.room-badge {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(12, 26, 42, 0.58);
+  color: #eaf7ff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+.exit {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(12, 26, 42, 0.58);
+  color: #eaf7ff;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.exit:hover {
+  background: rgba(12, 26, 42, 0.75);
 }
 </style>
