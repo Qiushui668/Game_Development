@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import { PHYSICS, PLAYER } from '@/game/core/GameConfig'
+import { OBSTACLE, PHYSICS, PLAYER } from '@/game/core/GameConfig'
 import { clamp, damp } from '@/game/utils/MathUtils'
 
 export interface MoveIntent {
@@ -23,6 +23,15 @@ export interface PlayerState {
   verticalSpeed: number
   grounded: boolean
   justLanded: boolean
+  /** 被障碍击中后的硬直中（输入无效） */
+  stunned: boolean
+}
+
+export interface Knockback {
+  dirX: number
+  dirZ: number
+  speed: number
+  hop: number
 }
 
 function approach(current: number, target: number, maxDelta: number): number {
@@ -61,6 +70,10 @@ export class PlayerController {
   private jumpBuffer = 0
   private feetY: number
   private facing: number
+  /** 硬直剩余时间 */
+  private stunT = 0
+  /** 重复命中间隔 */
+  private hitCooldownT = 0
 
   constructor(physics: RAPIER.World, spawn: { x: number; y: number; z: number }) {
     this.spawn = { ...spawn }
@@ -93,8 +106,12 @@ export class PlayerController {
 
   /** 固定步第一步：算期望位移并提交给运动学刚体。必须在 physics.step() 之前调用 */
   prepare(h: number, intent: MoveIntent): void {
-    // 跳跃输入缓冲：落地前一瞬间按下也能起跳
-    if (intent.jump) this.jumpBuffer = PLAYER.jumpBuffer
+    this.hitCooldownT = Math.max(0, this.hitCooldownT - h)
+    const stunned = this.stunT > 0
+    if (stunned) this.stunT = Math.max(0, this.stunT - h)
+
+    // 跳跃输入缓冲：落地前一瞬间按下也能起跳；硬直期间不接受
+    if (intent.jump && !stunned) this.jumpBuffer = PLAYER.jumpBuffer
     else this.jumpBuffer = Math.max(0, this.jumpBuffer - h)
 
     const rawLen = Math.hypot(intent.x, intent.y)
@@ -107,14 +124,21 @@ export class PlayerController {
     const rightX = Math.cos(intent.yaw)
     const rightZ = -Math.sin(intent.yaw)
 
-    const targetSpeed = intent.sprint ? PLAYER.sprintSpeed : PLAYER.maxSpeed
-    const targetVx = (forwardX * localY + rightX * localX) * targetSpeed
-    const targetVz = (forwardZ * localY + rightZ * localX) * targetSpeed
+    if (stunned) {
+      // 硬直：输入无效，击退速度按指数自然衰减，让人被"打飞"而非瞬停
+      const decay = Math.exp(-2.4 * h)
+      this.vx *= decay
+      this.vz *= decay
+    } else {
+      const targetSpeed = intent.sprint ? PLAYER.sprintSpeed : PLAYER.maxSpeed
+      const targetVx = (forwardX * localY + rightX * localX) * targetSpeed
+      const targetVz = (forwardZ * localY + rightZ * localX) * targetSpeed
 
-    const rate = rawLen > 0.01 ? PLAYER.accel : PLAYER.decel
-    const effectiveRate = this.grounded ? rate : rate * PLAYER.airControl
-    this.vx = approach(this.vx, targetVx, effectiveRate * h)
-    this.vz = approach(this.vz, targetVz, effectiveRate * h)
+      const rate = rawLen > 0.01 ? PLAYER.accel : PLAYER.decel
+      const effectiveRate = this.grounded ? rate : rate * PLAYER.airControl
+      this.vx = approach(this.vx, targetVx, effectiveRate * h)
+      this.vz = approach(this.vz, targetVz, effectiveRate * h)
+    }
 
     if (this.jumpBuffer > 0 && (this.grounded || this.coyote > 0)) {
       this.vy = PLAYER.jumpVelocity
@@ -176,7 +200,26 @@ export class PlayerController {
       verticalSpeed: this.vy,
       grounded: this.grounded,
       justLanded: this.grounded && !this.wasGrounded,
+      stunned: this.stunT > 0,
     }
+  }
+
+  /** 被障碍击中：打断输入、给一个水平击退 + 短促上抛。返回是否真的生效 */
+  applyKnockback(kb: Knockback): boolean {
+    if (this.hitCooldownT > 0) return false
+    this.vx = kb.dirX * kb.speed
+    this.vz = kb.dirZ * kb.speed
+    this.vy = Math.max(this.vy, kb.hop)
+    this.grounded = false
+    this.coyote = 0
+    this.jumpBuffer = 0
+    this.stunT = OBSTACLE.stunSeconds
+    this.hitCooldownT = OBSTACLE.hitCooldown
+    return true
+  }
+
+  get isStunned(): boolean {
+    return this.stunT > 0
   }
 
   respawn(): void {
@@ -193,6 +236,8 @@ export class PlayerController {
     this.grounded = false
     this.wasGrounded = false
     this.coyote = 0
+    this.stunT = 0
+    this.hitCooldownT = 0
   }
 
   /** 相机平滑用：把朝向角约束到 [-π, π] */

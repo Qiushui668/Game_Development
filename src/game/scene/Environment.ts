@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { COLORS, RENDER } from '@/game/core/GameConfig'
+import { COLORS, RENDER, TRACK } from '@/game/core/GameConfig'
 import { getMaterials } from '@/game/scene/Materials'
 
 function css(hex: number): string {
@@ -63,30 +63,27 @@ export class Environment {
     return mesh
   }
 
-  /** 低多边形远山：明暗两档各合并一次 */
+  /**
+   * 低多边形远山：明暗两档各合并一次。
+   * 山头全部摆到 |x| ≥ 65 m 的赛道外侧——之前固定坐标里有一峰在 x=0、z=-285，
+   * 赛道一延长到 320 m 就会直接撞进山体里。
+   */
   private buildMountains(): { light: THREE.Mesh; deep: THREE.Mesh } {
-    const peaks: Array<[number, number, number, number]> = [
-      [-70, -40, 34, 30],
-      [-108, -115, 46, 42],
-      [-150, -190, 40, 34],
-      [-42, -228, 56, 40],
-      [-190, -60, 30, 24],
-      [72, -70, 30, 26],
-      [118, -158, 50, 44],
-      [58, -246, 44, 34],
-      [170, -58, 30, 24],
-      [205, -150, 38, 30],
-      [0, -285, 62, 44],
-      [-105, -300, 50, 36],
-      [120, -300, 46, 34],
-    ]
     const light: THREE.BufferGeometry[] = []
     const deep: THREE.BufferGeometry[] = []
-    peaks.forEach(([x, z, radius, height], i) => {
-      const cone = new THREE.ConeGeometry(radius, height, 5, 1)
-      cone.translate(x, height / 2 - 2, z)
-      ;(i % 2 === 0 ? light : deep).push(cone)
-    })
+    const sideBase = 95
+    let i = 0
+    for (let z = -70; z > -(TRACK.length + 200); z -= 95) {
+      for (const side of [-1, 1]) {
+        const x = side * (sideBase + ((i * 23) % 70)) + (((i * 37) % 60) - 30)
+        const radius = 34 + ((i * 13) % 22)
+        const height = 26 + ((i * 17) % 18)
+        const cone = new THREE.ConeGeometry(radius, height, 5, 1)
+        cone.translate(x, height / 2 - 2, z + (((i * 29) % 50) - 25))
+        ;(i % 2 === 0 ? light : deep).push(cone)
+        i++
+      }
+    }
     const build = (geos: THREE.BufferGeometry[], mat: THREE.Material, name: string): THREE.Mesh => {
       const merged = mergeGeometries(geos, false)
       geos.forEach((g) => g.dispose())
@@ -102,11 +99,12 @@ export class Environment {
     }
   }
 
-  /** 远景底座，避免赛道"悬空在虚空里" */
+  /** 远景底座，避免赛道"悬空在虚空里"；尺寸随赛道长度走 */
   private buildGround(): THREE.Mesh {
-    const geo = new THREE.PlaneGeometry(900, 900, 1, 1)
+    const span = TRACK.length + 900
+    const geo = new THREE.PlaneGeometry(span, span, 1, 1)
     geo.rotateX(-Math.PI / 2)
-    geo.translate(0, -1.6, -120)
+    geo.translate(0, -1.6, -TRACK.length / 2)
     const mesh = new THREE.Mesh(geo, getMaterials().ground)
     mesh.name = 'DistantGround'
     mesh.matrixAutoUpdate = false
@@ -120,9 +118,11 @@ export class Environment {
       [-60, 46, -120, 1.0],
       [-14, 54, -175, 1.3],
       [48, 42, -100, 0.85],
-      [96, 52, -200, 1.2],
-      [-96, 58, -230, 1.1],
-      [24, 62, -280, 1.4],
+      [96, 52, -240, 1.2],
+      [-96, 58, -300, 1.1],
+      [24, 62, -360, 1.4],
+      [-40, 56, -430, 1.2],
+      [70, 60, -500, 1.3],
     ]
     for (const [x, y, z, s] of spots) {
       for (const [dx, dy, dz, r] of [

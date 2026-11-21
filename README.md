@@ -37,6 +37,12 @@ npm run build
 .\.venv\Scripts\python.exe tools\verify_m2.py
 ```
 
+障碍验收（扫地杆扫中 / 击退位移 / 硬直恢复 / 滚轴顶回 / 关卡长度，5 项）：
+
+```powershell
+.\.venv\Scripts\python.exe tools\verify_m3.py
+```
+
 ## 文档
 
 - `docs/DEVELOPMENT.md` — 环境、命令、目录结构、代码硬约束

@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import { MATCH, PHYSICS } from '@/game/core/GameConfig'
+import { MATCH, PHYSICS, TRACK } from '@/game/core/GameConfig'
 import { GameLoop } from '@/game/core/GameLoop'
 import { SceneManager } from '@/game/scene/SceneManager'
 import { Lighting } from '@/game/scene/Lighting'
@@ -22,6 +22,7 @@ export interface PerfSnapshot {
   samples: number
   speed: number
   grounded: boolean
+  stunned: boolean
 }
 
 const FRAME_WINDOW = 300
@@ -117,6 +118,15 @@ export class Game {
             cam.pitch = (pitchDeg * Math.PI) / 180
             cam.snap()
           },
+          /** 自动验收用：读障碍角度与关卡参数 */
+          getObstacles: () =>
+            this.world
+              ? {
+                  sweeperAngles: [...this.world.obstacles.sweepAngles],
+                  rollAngles: [...this.world.obstacles.rollAngles],
+                }
+              : null,
+          getTrack: () => ({ length: TRACK.length, finishZ: TRACK.finishZ, spawnZ: MATCH.spawnZ }),
         },
       })
     }
@@ -148,6 +158,7 @@ export class Game {
       samples,
       speed: state?.speed ?? 0,
       grounded: state?.grounded ?? true,
+      stunned: state?.stunned ?? false,
     }
   }
 
@@ -215,6 +226,12 @@ export class Game {
     player.prepare(h, { ...axes, jump, yaw: this.followCam?.yaw ?? 0 })
     physics.step()
     player.sync(h)
+
+    // 障碍判定放在物理结算之后：读到的是本步真实位置，不会穿过摆臂再判定
+    const st = player.read()
+    const hit = this.world?.obstacles.hit(st.x, st.y, st.z)
+    if (hit) player.applyKnockback(hit)
+
     this.world?.update(h)
   }
 

@@ -52,12 +52,13 @@ Game_Development/
 │  │  ├─ core/   GameConfig / GameLoop / GameState / Game
 │  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World
 │  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）
+│  │  ├─ physics/ ObstacleField（障碍布局 + 命中判定，纯 TS，服务端可复用）
 │  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃边沿触发）
 │  │  └─ utils/  MathUtils
 │  └─ types/     network.ts（协议冻结）
 ├─ backend/      阶段 B 的 Python 服务端
 ├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
-├─ tools/        perf_probe.py（性能/截图探针）/ verify_m2.py（手感 8 项验收）
+├─ tools/        perf_probe.py（性能/截图探针）/ verify_m2.py（手感 8 项）/ verify_m3.py（击退 5 项）
 └─ .venv/
 ```
 
@@ -89,6 +90,9 @@ Game_Development/
 | 阴面脸部发灰 | Lambert 只吃光照方向 | 脸材质加 `emissive` 0.3 保住奶油色 |
 | `npm run build` 报 exit 1 但其实成功 | PowerShell 把自带的 stderr 告警算作失败 | 判成功看 `✓ built in`，或 `*>` 重定向后读日志 |
 | 拍不到角色腾空截图 | 注入跳跃后 220 ms 就落地 | `setInterval` 每 900 ms 触发一次跳跃再截 |
+| 障碍"看得见撞不到" | 扫地杆/滚轴只有视觉没有判定 | `ObstacleField` 与视觉共用同一份布局和角度，物理步后统一判定 |
+| 延长赛道后撞进山体 | 远山坐标写死，有一峰在 x=0/z=−285 | 山头按赛道长度生成，全部摆到 \|x\| ≥ 65 m |
+| 滚轴挡住整条路 | 顶面 1.7 m 高于跳高 1.8 m 的可用余量 | 半径 0.65 / 轴心 0.67，顶面 1.32 m，可跳可绕 |
 
 ## 6. Git
 

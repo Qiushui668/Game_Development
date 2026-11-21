@@ -3,33 +3,22 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { COLORS, TRACK } from '@/game/core/GameConfig'
 import { getMaterials } from '@/game/scene/Materials'
+import {
+  HURDLE_HEIGHT,
+  HURDLE_ROWS,
+  HURDLE_THICKNESS,
+  ObstacleField,
+  ROLLERS,
+  SWEEPERS,
+} from '@/game/physics/ObstacleField'
 
 interface DynamicEntry {
   mesh: THREE.Mesh
   body: RAPIER.RigidBody
 }
 
-interface Spinner {
-  group: THREE.Group
-  speed: number
-  angle: number
-}
-
 /** 棋盘贴图一格 = 1.5 m，一张贴图 2×2 格 */
 const CHECKER_TILE = 3
-
-/** 栏架排布：每排若干段，交错留缺口。视觉与碰撞共用这份数据 */
-const HURDLE_ROWS: Array<{ z: number; pieces: Array<[number, number]> }> = [
-  { z: -34, pieces: [[-6.5, 5], [3.5, 4]] },
-  { z: -58, pieces: [[-4.5, 4], [5.5, 5]] },
-  { z: -82, pieces: [[-7.5, 3], [0, 6], [7.5, 3]] },
-  { z: -106, pieces: [[-5.5, 5], [4.5, 4]] },
-  { z: -130, pieces: [[-5, 4], [3, 3], [7.5, 3]] },
-  { z: -154, pieces: [[-3.5, 5], [5.5, 4]] },
-]
-
-const HURDLE_HEIGHT = 2.2
-const HURDLE_THICKNESS = 0.8
 
 /** 斜坡参数：坡度 10.6°，跑上去能验证控制器贴坡与落坡 */
 const RAMP_ANGLE = (10.6 * Math.PI) / 180
@@ -47,9 +36,11 @@ const RAMP_Y =
  */
 export class GameWorld {
   readonly group = new THREE.Group()
+  /** 障碍角度推进 + 命中判定（与视觉同源） */
+  readonly obstacles = new ObstacleField()
   private readonly dynamics: DynamicEntry[] = []
-  private readonly spinners: Spinner[] = []
-  private readonly rollers: Array<{ group: THREE.Group; speed: number }> = []
+  private readonly spinnerGroups: THREE.Group[] = []
+  private readonly rollerGroups: THREE.Group[] = []
 
   constructor(private readonly physics: RAPIER.World) {
     this.group.add(
@@ -64,7 +55,7 @@ export class GameWorld {
     this.buildColliders()
   }
 
-  /** 物理步之后同步刚体位姿 + 推进装饰件动画 */
+  /** 物理步之后同步刚体位姿 + 推进障碍角度 */
   update(dt: number): void {
     for (const entry of this.dynamics) {
       const t = entry.body.translation()
@@ -72,19 +63,20 @@ export class GameWorld {
       entry.mesh.position.set(t.x, t.y, t.z)
       entry.mesh.quaternion.set(r.x, r.y, r.z, r.w)
     }
-    for (const s of this.spinners) {
-      s.angle = (s.angle + s.speed * dt) % (Math.PI * 2)
-      s.group.rotation.y = s.angle
+    // 角度只在 ObstacleField 里推进，视觉直接读数：判定与画面永远同拍
+    this.obstacles.update(dt)
+    for (let i = 0; i < this.spinnerGroups.length; i++) {
+      this.spinnerGroups[i].rotation.y = this.obstacles.sweepAngles[i]
     }
-    for (const r of this.rollers) {
-      r.group.rotation.x = (r.group.rotation.x + r.speed * dt) % (Math.PI * 2)
+    for (let i = 0; i < this.rollerGroups.length; i++) {
+      this.rollerGroups[i].rotation.x = this.obstacles.rollAngles[i]
     }
   }
 
   dispose(): void {
     this.dynamics.length = 0
-    this.spinners.length = 0
-    this.rollers.length = 0
+    this.spinnerGroups.length = 0
+    this.rollerGroups.length = 0
     this.group.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.InstancedMesh) o.geometry.dispose()
     })
@@ -177,23 +169,17 @@ export class GameWorld {
     return mesh
   }
 
-  /** 横在赛道上的粉色滚轴（视觉滚动，碰撞留到阶段 C） */
+  /** 横跨赛道的粉色滚轴（绕自身轴转，顶高 1.7 m 可跳过去） */
   private buildPins(): THREE.Group {
     const group = new THREE.Group()
     group.name = 'RollingPins'
-    const spots: Array<[number, number, number]> = [
-      [-46, 8, 2.2],
-      [-98, 6.5, 1.4],
-      [-142, 8, 1.8],
-    ]
-    for (const [z, length, speed] of spots) {
+    for (const r of ROLLERS) {
       const holder = new THREE.Group()
-      holder.position.set(0, 1.25, z)
-      const barrel = new THREE.CylinderGeometry(1.15, 1.15, length, 12, 1)
+      holder.position.set(r.x, r.y, r.z)
+      const barrel = new THREE.CylinderGeometry(r.radius, r.radius, r.length, 14, 1)
       barrel.rotateZ(Math.PI / 2)
-      const mesh = new THREE.Mesh(barrel, getMaterials().pin)
-      holder.add(mesh)
-      this.rollers.push({ group: holder, speed })
+      holder.add(new THREE.Mesh(barrel, getMaterials().pin))
+      this.rollerGroups.push(holder)
       group.add(holder)
     }
     return group
@@ -201,38 +187,31 @@ export class GameWorld {
 
   /** 旋转扫地杆：绕立柱公转，参考图的粉色大摆臂 */
   private buildSpinners(): void {
-    const spots: Array<[number, number, number, number]> = [
-      [-22, -5.5, 6.2, 1.35],
-      [-70, 5.5, 6.6, -1.15],
-      [-118, -5.5, 6.0, 1.5],
-      [-166, 5.0, 5.4, -1.55],
-    ]
-
-    spots.forEach(([z, x, len, speed], i) => {
+    for (const s of SWEEPERS) {
       // 立柱 + 摆臂 + 端头合并成一个几何体：每根扫地杆只占 1 个 draw call
       const geos: THREE.BufferGeometry[] = []
       const post = new THREE.CylinderGeometry(0.42, 0.5, 2.0, 10)
       post.translate(0, 1.0, 0)
       geos.push(post)
 
-      const arm = new THREE.CylinderGeometry(0.5, 0.5, len, 10, 1)
+      const arm = new THREE.CylinderGeometry(0.5, 0.5, s.length, 10, 1)
       arm.rotateZ(Math.PI / 2)
-      arm.translate(len / 2, 1.05, 0)
+      arm.translate(s.length / 2, 1.05, 0)
       geos.push(arm)
 
       const cap = new THREE.SphereGeometry(0.55, 10, 8)
-      cap.translate(len, 1.05, 0)
+      cap.translate(s.length, 1.05, 0)
       geos.push(cap)
 
       const merged = mergeGeometries(geos, false)
       geos.forEach((g) => g.dispose())
 
       const pivot = new THREE.Group()
-      pivot.position.set(x, 0, z)
+      pivot.position.set(s.x, 0, s.z)
       pivot.add(new THREE.Mesh(merged, getMaterials().sweeper))
       this.group.add(pivot)
-      this.spinners.push({ group: pivot, speed, angle: i * 1.1 })
-    })
+      this.spinnerGroups.push(pivot)
+    }
   }
 
   /** 终点皇冠，合并成 1 个 draw call */

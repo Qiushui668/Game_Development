@@ -32,16 +32,30 @@ export const RENDER = {
 /** 赛道尺寸（单位：米） */
 export const TRACK = {
   width: 18,
-  /** Z 0 → -180 */
-  length: 180,
+  /** Z 0 → -320，约 32 s（10 m/s）到 46 s（7 m/s）跑完 */
+  length: 320,
   startZ: 0,
-  finishZ: -180,
+  finishZ: -320,
   /** 碰撞厚度，中心 y = -thickness/2 */
   groundThickness: 0.5,
   railHeight: 1,
   railWidth: 0.5,
   startPlatformLength: 15,
   finishPlatformLength: 6,
+} as const
+
+/** 障碍（扫地杆 / 滚轴）的判定与击退参数 */
+export const OBSTACLE = {
+  /** 扫地杆摆臂半径（判定与几何共用） */
+  armRadius: 0.5,
+  /** 被击中后的水平击退速度 */
+  knockbackSpeed: 10.5,
+  /** 被击中时的上抛速度，给一个短促的离地感 */
+  knockbackHop: 3.2,
+  /** 硬直时长：这段时间输入无效，只能等速度衰减 */
+  stunSeconds: 0.9,
+  /** 同一次接触的重复命中间隔，防止贴边连击 */
+  hitCooldown: 0.35,
 } as const
 
 /** 角色（M2 使用，先定格，避免后续改动协议与手感基准） */

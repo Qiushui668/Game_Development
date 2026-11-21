@@ -109,13 +109,15 @@ export class JellyBean {
     this.runPhase += dt * (2.5 + speedRatio * 10.5)
     this.breathe += dt * 2.1
 
-    // 腾空权重：0 = 地面，1 = 空中
-    this.airBlend = damp(this.airBlend, s.grounded ? 0 : 1, 12, dt)
+    // 腾空权重：0 = 地面，1 = 空中；被击中硬直时也走这套"四脚朝天"的失控姿态
+    const airTarget = s.grounded && !s.stunned ? 0 : 1
+    this.airBlend = damp(this.airBlend, airTarget, 12, dt)
     if (s.justLanded) this.squash = Math.max(this.squash, 0.22)
     this.squash = damp(this.squash, 0, 14, dt)
 
     const swing = Math.sin(this.runPhase)
     const runAmp = speedRatio * (1 - this.airBlend)
+    const stunFlail = s.stunned ? Math.sin(this.runPhase * 3.4) * 0.35 : 0
     const armSwing = swing * 0.55 * runAmp
     const legSwing = swing * 0.62 * runAmp
     const raise = this.airBlend * 0.85
@@ -124,8 +126,8 @@ export class JellyBean {
     this.legR.rotation.x = -legSwing + this.airBlend * 0.28
     this.armL.rotation.x = armSwing
     this.armR.rotation.x = -armSwing
-    this.armL.rotation.z = -raise
-    this.armR.rotation.z = raise
+    this.armL.rotation.z = -raise + stunFlail
+    this.armR.rotation.z = raise + stunFlail
 
     // 躯干：跑动前倾 + 上下起伏；待机时轻微呼吸
     const bob = Math.abs(Math.sin(this.runPhase)) * 0.05 * runAmp
