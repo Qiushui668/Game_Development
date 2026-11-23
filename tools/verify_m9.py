@@ -189,7 +189,7 @@ MEASURE_JS = r"""
   // 钉在 z≈-11.5（第一根扫地杆 -22 之前，两侧没有实体障碍），先清掉所有随机身份
   P.clearTiles();
   await sleep(120);
-  const voidIdx = idxAt(1.5, -11.5);
+  const voidIdx = idxAt(-4.5, -11.5);
   const voidSet = P.setTileRole(voidIdx, 'vanish');
   const voidDef = P.getTiles().tiles[voidIdx];
   P.resetHealth();
@@ -234,6 +234,8 @@ MEASURE_JS = r"""
 
   // ---------- 6. 回弹格：往起点弹十几米、不扣血 ----------
   // 先清空随机身份，只把 z≈-17.5 那一块钉成回弹格（正前方 12 m 内没有任何实体）
+  // 量点固定走左半边（x=-4.5）：B1.9 把起跑道拳套挪到右墙 z≈-11 后，x=1.5 会落进它的
+  // 出拳范围，"纯速度衰减"会被拳套打飞打断（实测 hp 归零、复活后带着残余速度多滑 2.5 m）。
   P.clearTiles();
   await sleep(150);
   const bumpIdx = idxAt(1.5, -17.5);
@@ -241,19 +243,36 @@ MEASURE_JS = r"""
   const bumpDef = P.getTiles().tiles[bumpIdx];
 
   // 先把"回弹初速"本身量一遍：纯速度衰减算退距（目标约 12 m）
-  // 位置选 z≈-8：第一根扫地杆在 -22 够不到、-40 的地刺也够不到，前方 +z 一路空档
+  // 位置选 z≈-8 的左半边：第一根扫地杆在 -22 够不到、-40 的地刺也够不到，前方 +z 一路空档；
+  // x=-4.5 同时避开右墙拳套（拳套只探到 x≥1）
   P.resetHealth();
-  P.teleport(1.5, 0.05, -8);
+  P.teleport(-4.5, 0.05, -8);
   await sleep(250);
   const bpFrom = P.getPlayer();
   const bpApplied = P.pushPlayer(0, 1, out.tuning.tileBounceSpeed, 12, out.tuning.tileBounceStun);
-  await sleep(1500);
+  // 采样轨迹：确认这 1.5 s 里没被拳套/别的障碍打断（拳套 1 就在右墙 z≈-11）
+  const bpTrace = [];
+  for (let i = 0; i < 15; i++) {
+    await sleep(100);
+    const s = P.getPlayer();
+    const st = P.getStatus();
+    const g1 = P.getGloves().stations[0];
+    bpTrace.push({
+      t: (i + 1) * 100,
+      z: +(s.z - bpFrom.z).toFixed(2),
+      hp: st.hp,
+      deaths: st.deaths,
+      gz: +g1.z.toFixed(2),
+      ge: +g1.extend.toFixed(2),
+    });
+  }
   const bpTo = P.getPlayer();
   out.pushBounce = {
     applied: bpApplied,
     speed: out.tuning.tileBounceSpeed,
     dist: Math.hypot(bpTo.x - bpFrom.x, bpTo.z - bpFrom.z),
     dz: bpTo.z - bpFrom.z,
+    trace: bpTrace,
   };
 
   P.resetHealth();
@@ -578,7 +597,7 @@ async def main() -> int:
             check(
                 "回弹初速 31 m/s：实测往起点方向弹回 ≥10.5 m",
                 pb["applied"] is True and 10.5 <= pb["dist"] <= 14.0,
-                f"dist={pb['dist']:.2f} m (目标约 12 m)",
+                f"dist={pb['dist']:.2f} m (目标约 12 m) trace={pb.get('trace')}",
             )
             check(
                 "踩到回弹格真的被弹回十几米（≥9 m、进入硬直、格子播了压缩动画）",

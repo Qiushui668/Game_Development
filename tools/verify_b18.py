@@ -181,7 +181,7 @@ ELIMINATE_JS = r"""
     await sleep(90);
     const now = P.getStatus();
     if (now.deaths > before.deaths) {
-      hit = { extend: P.getGloves().stations[0].extend, at: performance.now() - t0 };
+      hit = { extend: P.getGloves().stations[0].extend, at: performance.now() - t0, hp: now.hp };
       break;
     }
   }
@@ -484,8 +484,10 @@ async def main() -> int:
                 raise SystemExit('页面未就绪（__PPR.getGloves 不存在）')
 
             glove = await cdp.eval_js(GLOVE_JS, timeout_s=60)
-            check('赛道两侧一共 4 只巨型拳套（左右交替）',
-                  glove['count'] == 4 and [s['side'] for s in glove['stations']] == [-1, 1, -1, 1],
+            check('赛道两侧一共 4 只巨型拳套（左右交替、前后拉开）',
+                  glove['count'] == 4 and [s['side'] for s in glove['stations']] == [1, -1, 1, -1]
+                  and glove['stations'][0]['zCenter'] > -20
+                  and glove['stations'][-1]['zCenter'] < -240,
                   json.dumps(glove['stations'], ensure_ascii=False))
             check('拳套沿 Z 前后滑动（3 s 内位移 > 2 m），且不越出各自滑轨',
                   glove['zMax'] - glove['zMin'] > 2.0 and glove['inRange'],
@@ -494,12 +496,27 @@ async def main() -> int:
                   glove['eMax'] > 0.85 and glove['eMin'] < 0.2,
                   f"extend {glove['eMin']:.2f} – {glove['eMax']:.2f}")
 
+            layout = await cdp.eval_js(
+                "(() => { const l = window.__PPR.getLayout(); "
+                "return { n: l.bands.length, c: l.conflicts, gloves: l.bands.filter(b => b.name.startsWith('拳套')) }; })()",
+                timeout_s=40)
+            check('障碍俯视图两两不重叠（含拳套与扫地杆/滚轴/地刺/栏架/答题墙）',
+                  isinstance(layout['c'], list) and len(layout['c']) == 0,
+                  json.dumps(layout['c'], ensure_ascii=False))
+            check('拳套都挂在墙上、避开赛道中线（中间留得下一条跑道）',
+                  all(b['xMin'] >= 0.9 or b['xMax'] <= -0.9 for b in layout['gloves'])
+                  and all(b['xMin'] <= 9.6 and b['xMax'] >= -9.6 for b in layout['gloves']),
+                  json.dumps(layout['gloves'], ensure_ascii=False))
+
             elim = await cdp.eval_js(ELIMINATE_JS, timeout_s=60)
             check('被拳套打飞 → 记一次淘汰（deaths +1）',
                   elim['hit'] is not None and elim['after']['deaths'] > elim['before']['deaths'],
                   json.dumps({'hit': elim['hit'], 'before': elim['before'], 'after': elim['after']}, ensure_ascii=False))
             check('打飞只在拳头真伸出来时判定（extend ≥ 0.6）',
                   elim['hit'] is not None and elim['hit']['extend'] >= 0.6,
+                  json.dumps(elim['hit'], ensure_ascii=False))
+            check('打飞时先扣光 100 血（血条归零）',
+                  elim['hit'] is not None and elim['hit'].get('hp') == 0,
                   json.dumps(elim['hit'], ensure_ascii=False))
             check('淘汰后回起点复活（z≈3.5、满血）',
                   elim['pos'] is not None and abs(elim['pos']['z'] - 3.5) < 1.2 and elim['after']['hp'] == 100,
@@ -603,7 +620,8 @@ async def main() -> int:
             check('结算面板有「返回房间」和「再来一局」两个按钮',
                   panel['result']['hasGhost'] is True and panel['result']['hasAgain'] is True,
                   json.dumps(panel['result'], ensure_ascii=False))
-            check('结算面板写明"全员同意才开下一局"', '全员' in (panel['result']['hint'] or ''),
+            check('结算面板写明"结算页上的人才需要点再来一局"',
+                  '结算页' in (panel['result']['hint'] or '') and '再来一局' in (panel['result']['hint'] or ''),
                   panel['result']['hint'])
             await shoot(cdp, "(() => { void 0 })()", OUT_DIR / 'perf_b18_result.png', 0.1)
 
@@ -629,6 +647,60 @@ async def main() -> int:
             check('全员同意后自动开下一局（结算面板消失、重新倒数/起跑）',
                   started is not None and started['result'] is None and started['race'] in ('Countdown', 'Racing'),
                   json.dumps(started, ensure_ascii=False))
+
+            # ---------- 个人返回大厅：只自己走，别人的结算页不受影响 ----------
+            # 先把这一局跑到结算（上一段刚自动开了新的一局）
+            deadline = time.time() + 10
+            racing2 = None
+            while time.time() < deadline:
+                racing2 = await cdp.eval_js(ONLINE_JS)
+                if racing2['race'] == 'Racing':
+                    break
+                await asyncio.sleep(0.3)
+            await asyncio.sleep(0.8)
+            await b1.send({'type': 'finish', 't': 2000})
+            deadline = time.time() + 8
+            panel2 = None
+            while time.time() < deadline:
+                panel2 = await cdp.eval_js(ONLINE_JS)
+                if panel2['result']:
+                    break
+                await asyncio.sleep(0.3)
+            check('第二局一样：一个人冲线就全场结算', bool(panel2 and panel2['result']),
+                  json.dumps(panel2['result'] if panel2 else None, ensure_ascii=False))
+
+            await cdp.eval_js("(() => { document.querySelector('.actions .ghost')?.click(); return true })()")
+            deadline = time.time() + 6
+            home = None
+            while time.time() < deadline:
+                home = await cdp.eval_js(ONLINE_JS)
+                if home['backHome']:
+                    break
+                await asyncio.sleep(0.3)
+            check('点「返回房间」→ 自己回到房间大厅（房间没关）',
+                  home is not None and home['backHome'] is True,
+                  json.dumps(home, ensure_ascii=False))
+
+            leaked = False
+            try:
+                await b1.wait('back_to_lobby', timeout=1.2)
+                leaked = True
+            except TimeoutError:
+                leaked = False
+            check('别人不会跟着回大厅（back_to_lobby 不广播给全场）', leaked is False, f'leaked={leaked}')
+
+            # 剩下那个人（机器人）点再来一局 → 结算页上所有人都同意了 → 自动开下一局
+            await b1.send({'type': 'rematch'})
+            deadline = time.time() + 8
+            pulled = None
+            while time.time() < deadline:
+                pulled = await cdp.eval_js(ONLINE_JS)
+                if pulled['inGame'] and pulled['race'] in ('Countdown', 'Racing'):
+                    break
+                await asyncio.sleep(0.3)
+            check('回了大厅也不挡开局：剩下的人都同意就自动开，并把我一起带回赛道',
+                  pulled is not None and pulled['inGame'] is True and pulled['race'] in ('Countdown', 'Racing'),
+                  json.dumps(pulled, ensure_ascii=False))
 
     finally:
         for bot in bots:

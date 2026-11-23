@@ -24,21 +24,22 @@
 
 消息编码：JSON，必须有 `type`。位置包字段刻意压短（`p` / `r` / `s` / `a`）以在 20 Hz 下省带宽。
 
-协议版本 `PROTOCOL_VERSION = 5`（v1 只有单机骨架；v2 加了 `hello`、攻击同步与 `back_to_lobby`；v3 加了血量/死亡广播与击杀计数；v4 在 `PlayerStatePayload` 里补了 `h`（血量）；v5 加房间阶段 `state`、中途加入的 `game_state`、全场结算 `race_over`、再来一局投票 `rematch`/`rematch_status` 与 `GET /rooms`）。握手时服务器下发 `hello`，版本不匹配由客户端拒绝进入游戏。
+协议版本 `PROTOCOL_VERSION = 6`（v1 只有单机骨架；v2 加了 `hello`、攻击同步与 `back_to_lobby`；v3 加了血量/死亡广播与击杀计数；v4 在 `PlayerStatePayload` 里补了 `h`（血量）；v5 加房间阶段 `state`、中途加入的 `game_state`、全场结算 `race_over`、再来一局投票 `rematch`/`rematch_status` 与 `GET /rooms`；v6 把 `back_to_lobby` 从"整房回大厅"改成"只把自己送回大厅"并给 `PlayerBrief` 补 `inLobby`）。握手时服务器下发 `hello`，版本不匹配由客户端拒绝进入游戏。
 
 ### 2.1 房间状态机
 
 ```
 lobby ──start_game(≥2 人)──▶ countdown ──3 s──▶ racing ──第一个 finish──▶ results
   ▲                                                                        │
-  └──────────────────── back_to_lobby（任意人点"返回房间"）──────────────────┘
+  └────── 全员都 inLobby（各自点"返回房间"，累加）→ room.state 落回 lobby ──┘
   ▲                                                                        │
-  └──────────────────── 全员 rematch（全票）→ 直接重开 countdown ─────────────┘
+  └────────── 未回大厅的人全票 rematch → 直接重开 countdown ─────────────────┘
 ```
 
 - **`leave_room` 不改变阶段**：谁走都只是从 `members` 里移除，比赛照跑；人走光了才解散房间。
-- **`join_room` 在 `countdown` / `racing` 也放行**（中途加入），只有 `members.length >= 8` 才回 `ROOM_FULL`。
+- **`join_room` 在 `countdown` / `racing` 也放行**（中途加入），只有 `members.length >= 8` 才回 `ROOM_FULL`；`results` 阶段进房的人 `inLobby = true`，先待在大厅。
 - **`finish` 只在第一个冲线时把阶段推到 `results` 并广播 `race_over`**；之后其他人的 `finish` 只更新成绩，不再改阶段。
+- **"返回房间"是个人动作**：只有 `results` 阶段允许（`countdown` / `racing` 回 `BAD_MESSAGE`）。它把**自己**标记成 `inLobby = true`、清掉自己的 `rematch`，服务器**只给本人**发 `back_to_lobby`，同时广播 `room_state`（带 `inLobby`）与 `rematch_status`（分母已剔除回大厅的人）。只有**所有人都 `inLobby`** 时才把 `room.state` 落回 `lobby` 并清掉全房成绩。
 
 ## 3. 客户端 → 服务器
 
@@ -48,8 +49,8 @@ lobby ──start_game(≥2 人)──▶ countdown ──3 s──▶ racing �
 | `join_room` | `code`, `nickname`, `color` | 一次 | 加入已有房间；**比赛中也允许**（中途加入），满 8 人才拒 |
 | `leave_room` | — | 按需 | 主动离开；不改变房间阶段，房主离开自动转移 |
 | `start_game` | — | 一次 | 仅 host 有效且人数 ≥ 2，否则回 `NOT_HOST` / `NOT_ENOUGH_PLAYERS` |
-| `back_to_lobby` | — | 按需 | 结算后回大厅，全房重置成绩等下一局 |
-| `rematch` | — | 按需 | 结算面板点"再来一局"；全员都发过则服务器自动开下一局 |
+| `back_to_lobby` | — | 按需 | 结算后只把自己送回大厅（服务器只回本人，不动别人） |
+| `rematch` | — | 按需 | 结算面板点"再来一局"；未回大厅的人全票通过则服务器自动开下一局 |
 | `player_state` | `payload: PlayerStatePayload` | 20 Hz | 位置/朝向/状态/速度归一化 |
 | `attack` | `kind: 'light'\|'heavy'`, `side` | 事件触发 | 出招动画广播，别人照着播 |
 | `attack_hit` | `targetId`, `kind`, `side`, `x`, `z` | 事件触发 | 攻击者本地判定打到了谁 |
@@ -88,11 +89,11 @@ lobby ──start_game(≥2 人)──▶ countdown ──3 s──▶ racing �
 | `player_finished` | `playerId`, `timeMs` | 服务器计算的完成时间 |
 | `leaderboard` | `rows[]` | 名次（未完赛 `timeMs = null`，排最后）；每行带 `kills` |
 | `race_over` | `rows[]`, `byPlayerId` | **第一个冲线**：全场一起进结算页（还在跑的人也弹结算） |
-| `rematch_status` | `votes`, `total`, `voterIds[]` | 再来一局投票进度，结算面板显示"已同意 2/3" |
-| `back_to_lobby` | — | 回到大厅 |
+| `rematch_status` | `votes`, `total`, `voterIds[]` | 再来一局投票进度（`total` 不含`inLobby`的人），结算面板显示"已同意 2/3" |
+| `back_to_lobby` | — | 你自己回到大厅（只发给你自己，别人收不到） |
 | `error` | `code`, `message` | 见下表 |
 
-`PlayerBrief`：`id / nickname / color('#rrggbb') / host / finished / slot(0..7) / lateJoin? / rematch?`。`slot` 决定起跑线站位，客户端按 `(slot - (n-1)/2) * 2.4 m` 落位；`lateJoin` 标记"进来时这局已经在跑"。
+`PlayerBrief`：`id / nickname / color('#rrggbb') / host / finished / slot(0..7) / lateJoin? / rematch? / inLobby`。`slot` 决定起跑线站位，客户端按 `(slot - (n-1)/2) * 2.4 m` 落位；`lateJoin` 标记"进来时这局已经在跑"；`inLobby` 标记"结算期已经点过返回房间、人不在结算页上"。
 
 ### 4.1 `GET /rooms`（HTTP，同一端口）
 
@@ -148,12 +149,13 @@ lobby ──start_game(≥2 人)──▶ countdown ──3 s──▶ racing �
 
 - 第一个 `finish` → 服务器把阶段设成 `results`、清空全员 `rematch` 标记，广播 `race_over { rows, byPlayerId }` + `room_state`。
 - 客户端收到 `race_over` 调 `Game.endMatch()`：**不管本机在跑、在答题还是早已完赛**，统一 `race.force('Result')` 进结算页（用 `force` 而不是 `set`，因为这是服务器裁判做出的跳转）；没跑到终点的人显示"未完成"。
-- `rematch`：只记 `member.rematch = true` 并广播 `rematch_status {votes,total,voterIds}`；`everyoneWantsRematch` 为真时 `startGame()` —— `lobby` 与 `results` 都能开。客户端收到 `countdown` 调 `Game.resetRound()` 复位并进倒数。
-- `back_to_lobby`：回大厅、清本局成绩；**所有人都回大厅**（结算页上点"返回房间"就是这个语义）。
+- `rematch`：只记 `member.rematch = true` 并广播 `rematch_status {votes,total,voterIds}`；`total` 只数**没回大厅（`!inLobby`）**的人，`everyoneWantsRematch` 为真时 `startGame()` —— `lobby` 与 `results` 都能开，开局前服务器把所有人 `inLobby = false`（回大厅的人也被一起带回赛道）。客户端收到 `countdown` 调 `Game.resetRound()` 复位并进倒数。
+- `back_to_lobby`：**只影响自己**。服务器把该成员标 `inLobby = true`、清掉自己的 `rematch`，然后：①`back_to_lobby` 只发给本人（别人不回大厅、结算页不动）；②给全场广播 `room_state`（`PlayerBrief` 带 `inLobby`，大厅里会显示"结算中"标签）与新的 `rematch_status`。只有**所有人都 `inLobby`** 时才把 `room.state` 落回 `lobby` 并 `resetMemberStats`。`countdown` / `racing` 阶段发这个包会回 `BAD_MESSAGE`。
+- 客户端判断"要不要待在首页大厅"看两个信号：自己的 `inLobby` 或 `room.state === 'lobby'`；所以结算页上别人点返回房间不会把自己踢回首页。
 
 ### 7.5 巨型拳套（本地障碍，不走网络）
 
-拳套的滑动相位、出拳相位都是**各客户端本地按同一个常量表**（`GLOVES` 的 `zCenter / zRange / slideSpeed / slidePhase / punchPhase`）算的，协议不传；被拳套打飞是本地判定（`ObstacleHit.eliminate`），打飞后发 `died { killerId: null }`，服务器只记一次掉落，不算任何人的击杀。
+拳套的滑动相位、出拳相位都是**各客户端本地按同一个常量表**（`GLOVES` 的 `zCenter / zRange / slideSpeed / slidePhase / punchPhase`）算的，协议不传；4 只的位置分别落在 `-11 / -139.9 / -183.5 / -243.6`（右→左→右→左），探拳最远 6.5 m，中线始终留 ≥0.5 m 逃生缝。被拳套打飞是本地判定：命中时先 `health.damage(100)` **把血扣光**（血条立刻归零、死亡数 +1，写入 `damageLog`），再播 1 s 飞行，落地后 `health.reset()` 回起点满血；同时发 `died { killerId: null }`，服务器只记一次掉落，不算任何人的击杀。
 
 ### 7.6 赛道方格是"本地随机"
 

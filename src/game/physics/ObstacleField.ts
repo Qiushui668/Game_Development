@@ -1,4 +1,5 @@
 import { GLOVE, OBSTACLE, PLAYER, TRACK } from '@/game/core/GameConfig'
+import { QUIZ_GATES } from '@/game/quiz/QuizSystem'
 
 /**
  * 障碍布局与命中判定（纯 TS：不 import three、不碰 DOM）。
@@ -96,7 +97,7 @@ export const SWEEPERS: SweeperDef[] = [
   { x: -5.5, z: -22, length: 6.2, speed: 1.35 * OBSTACLE.sweepSpeedScale, phase: 0 },
   { x: 5.5, z: -92, length: 6.6, speed: -1.15 * OBSTACLE.sweepSpeedScale, phase: 1.1 },
   { x: -5.5, z: -118, length: 6.0, speed: 1.5 * OBSTACLE.sweepSpeedScale, phase: 2.2 },
-  { x: 5.0, z: -166, length: 5.4, speed: -1.55 * OBSTACLE.sweepSpeedScale, phase: 3.3 },
+  { x: 5.0, z: -168.5, length: 5.4, speed: -1.55 * OBSTACLE.sweepSpeedScale, phase: 3.3 },
   { x: -6.0, z: -214, length: 6.4, speed: 1.65 * OBSTACLE.sweepSpeedScale, phase: 1.7 },
   { x: 5.5, z: -262, length: 5.8, speed: -1.4 * OBSTACLE.sweepSpeedScale, phase: 2.9 },
   { x: -5.0, z: -310, length: 6.6, speed: 1.25 * OBSTACLE.sweepSpeedScale, phase: 4.1 },
@@ -128,8 +129,9 @@ export const PENDULUMS: PendulumDef[] = [
 
 /**
  * 巨型拳击手套：挂在左右墙上的固定挂钩，**只沿 Z 前后来回滑动**（不左右移动），
- * 每个挂钩按自己的周期随机探拳。打中 = 直接把人打飞出赛道（淘汰 → 回起点复活）。
- * 位置挑在原有障碍之间的空档，且左右交替，跑一趟必然撞见两次以上。
+ * 每个挂钩按自己的周期随机探拳。打中 = 扣光 100 血后把人打飞出赛道（淘汰 → 回起点复活）。
+ * 位置全部挑在其它障碍的 Z 空档里（不与扫地杆/滚轴/地刺/摆锤/栏架/答题墙重叠），
+ * 左右交替、前后拉开：起跑段一只（右墙）→ 中段（左墙）→ 后半（右墙）→ 尾段（左墙）。
  */
 export interface GloveDef {
   /** 挂左墙（-1）还是右墙（+1） */
@@ -146,11 +148,18 @@ export interface GloveDef {
   punchPhase: number
 }
 
+/**
+ * 4 只拳套的 Z 区间都落在其它障碍的空档里（body ±1.5 m 也不碰到邻居，两侧最近留 ≥0.9 m）：
+ *  - 起跑段：-8.8..-13.2（下一根扫地杆 -15.8 才起步，且它在左半、拳套在右墙）
+ *  - 前中段：-137.4..-142.4（答题墙 2 在 -136.4、滚轴在 -143.3，中间只留这一条缝，所以滑幅收窄）
+ *  - 后半：  -179.8..-187.2（栏架 -178.4 与地刺 -188.5 之间）
+ *  - 尾段：  -239.5..-247.7（滚轴 -237.3 与栏架 -249.6 之间，居中放）
+ */
 export const GLOVES: GloveDef[] = [
-  { side: -1, zCenter: -13, zRange: 7, slideSpeed: 1.1, slidePhase: 0.15, punchPhase: 0.05 },
-  { side: 1, zCenter: -126, zRange: 6, slideSpeed: 0.95, slidePhase: 0.55, punchPhase: 0.35 },
-  { side: -1, zCenter: -206, zRange: 5.5, slideSpeed: 1.25, slidePhase: 0.8, punchPhase: 0.6 },
-  { side: 1, zCenter: -280, zRange: 6, slideSpeed: 1.0, slidePhase: 0.05, punchPhase: 0.85 },
+  { side: 1, zCenter: -11, zRange: 2.2, slideSpeed: 1.15, slidePhase: 0.2, punchPhase: 0.1 },
+  { side: -1, zCenter: -139.9, zRange: 1.0, slideSpeed: 0.95, slidePhase: 0.6, punchPhase: 0.45 },
+  { side: 1, zCenter: -183.5, zRange: 2.2, slideSpeed: 1.25, slidePhase: 0.85, punchPhase: 0.7 },
+  { side: -1, zCenter: -243.6, zRange: 2.6, slideSpeed: 1.05, slidePhase: 0.05, punchPhase: 0.9 },
 ]
 
 /** 手套当前状态：滑动到的 z、拳头探出比例 0..1、蓄力回拉比例 0..1 */
@@ -428,4 +437,105 @@ export class ObstacleField {
 
     return null
   }
+}
+
+/** 一个障碍在俯视图上占的矩形（X/Z），给"布局不许重叠"的自动检查用 */
+export interface LayoutBand {
+  name: string
+  xMin: number
+  xMax: number
+  zMin: number
+  zMax: number
+}
+
+/**
+ * 把所有障碍摊到俯视图的矩形里：扫地杆按摆臂扫掠圆、滚轴按自身尺寸、
+ * 地刺/栏架/答题墙按实体、拳套按"完全探出时"的整只范围。
+ */
+export function layoutBands(): LayoutBand[] {
+  const halfW = TRACK.width / 2
+  const bands: LayoutBand[] = []
+
+  SWEEPERS.forEach((s, i) => {
+    bands.push({
+      name: `扫地杆${i + 1}`,
+      xMin: s.x - s.length,
+      xMax: s.x + s.length,
+      zMin: s.z - s.length,
+      zMax: s.z + s.length,
+    })
+  })
+  ROLLERS.forEach((r, i) => {
+    bands.push({
+      name: `滚轴${i + 1}`,
+      xMin: r.x - r.length / 2,
+      xMax: r.x + r.length / 2,
+      zMin: r.z - r.radius,
+      zMax: r.z + r.radius,
+    })
+  })
+  SPIKE_STRIPS.forEach((s, i) => {
+    bands.push({
+      name: `地刺${i + 1}`,
+      xMin: -s.width / 2,
+      xMax: s.width / 2,
+      zMin: s.z - s.length / 2,
+      zMax: s.z + s.length / 2,
+    })
+  })
+  PENDULUMS.forEach((p, i) => {
+    const swing = p.armLength * Math.sin(p.swing) + p.headRadius
+    bands.push({
+      name: `摆锤${i + 1}`,
+      xMin: p.x - swing,
+      xMax: p.x + swing,
+      zMin: p.z - p.headRadius,
+      zMax: p.z + p.headRadius,
+    })
+  })
+  HURDLE_ROWS.forEach((row, i) => {
+    for (const [cx, w] of row.pieces) {
+      bands.push({
+        name: `栏架${i + 1}`,
+        xMin: cx - w / 2,
+        xMax: cx + w / 2,
+        zMin: row.z - HURDLE_THICKNESS / 2,
+        zMax: row.z + HURDLE_THICKNESS / 2,
+      })
+    }
+  })
+  GLOVES.forEach((g, i) => {
+    const punch = GLOVE.reach + GLOVE.fistRadius
+    const xMin = g.side > 0 ? halfW - punch : -halfW
+    const xMax = g.side > 0 ? halfW : -halfW + punch
+    bands.push({
+      name: `拳套${i + 1}`,
+      xMin,
+      xMax,
+      zMin: g.zCenter - g.zRange - GLOVE.fistRadius,
+      zMax: g.zCenter + g.zRange + GLOVE.fistRadius,
+    })
+  })
+  QUIZ_GATES.forEach((g, i) => {
+    bands.push({ name: `答题墙${i + 1}`, xMin: -halfW, xMax: halfW, zMin: g.z - 0.4, zMax: g.z + 0.4 })
+  })
+  return bands
+}
+
+/** 两两检查布局：X 与 Z 都重叠（超过 eps）就算撞了，返回冲突对 */
+export function layoutConflicts(eps = 0.05): Array<[string, string]> {
+  const bands = layoutBands()
+  const out: Array<[string, string]> = []
+  for (let i = 0; i < bands.length; i++) {
+    for (let j = i + 1; j < bands.length; j++) {
+      const a = bands[i]
+      const b = bands[j]
+      // 同一排栏架的不同段本来就是并排摆的，跳过
+      if (a.name === b.name) continue
+      const dz = Math.min(a.zMax, b.zMax) - Math.max(a.zMin, b.zMin)
+      const dx = Math.min(a.xMax, b.xMax) - Math.max(a.xMin, b.xMin)
+      if (dz > eps && dx > eps) out.push([a.name, b.name])
+    }
+  }
+  return out
 }

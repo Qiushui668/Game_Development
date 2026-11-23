@@ -47,7 +47,7 @@ function cleanColor(raw) {
   return '#ff3f8b'
 }
 
-/** @typedef {{ id: string, nickname: string, color: string, ws: import('ws').WebSocket, slot: number, joinedAt: number, finished: boolean, timeMs: number | null, checkpoint: number, falls: number, kills: number, rematch: boolean, lateJoin: boolean }} Member */
+/** @typedef {{ id: string, nickname: string, color: string, ws: import('ws').WebSocket, slot: number, joinedAt: number, finished: boolean, timeMs: number | null, checkpoint: number, falls: number, kills: number, rematch: boolean, lateJoin: boolean, inLobby: boolean }} Member */
 /** @typedef {'lobby'|'countdown'|'racing'|'results'} RoomPhase */
 /** @typedef {{ code: string, hostId: string, state: RoomPhase, members: Member[], raceStartAt: number, countdownTimer: ReturnType<typeof setTimeout> | null }} Room */
 
@@ -61,6 +61,8 @@ function roomPlayers(room) {
     slot: m.slot,
     /** 中途加入的人：客户端据此知道他没跑前半程 */
     lateJoin: m.lateJoin,
+    /** 自己点了「返回房间」：只有他回大厅，别人还在结算/跑图 */
+    inLobby: m.inLobby,
   }))
 }
 
@@ -198,6 +200,8 @@ function joinCommon(session, room, nickname, color) {
     rematch: false,
     /** 中途加入：进来时这局已经跑了一段 */
     lateJoin: room.state === 'racing' || room.state === 'countdown',
+    /** 结算阶段进房的人先待在大厅，等下一局自动带上 */
+    inLobby: room.state === 'results',
   }
   room.members.push(member)
   session.room = room
@@ -225,19 +229,38 @@ function joinCommon(session, room, nickname, color) {
   return member
 }
 
+/**
+ * 全员都同意"再来一局"？
+ * **只统计还在结算页的人**：已经点了「返回房间」回大厅的人（inLobby）不投票、也不计入分母，
+ * 免得一个人回了大厅就把整局卡死。开下一局时会把大厅里的人一起带上。
+ */
 function everyoneWantsRematch(room) {
-  return room.members.length > 0 && room.members.every((m) => m.rematch)
+  const voting = room.members.filter((m) => !m.inLobby)
+  return voting.length > 0 && voting.every((m) => m.rematch)
+}
+
+/** 广播再来一局投票进度（分母只算还在结算页的人） */
+function broadcastRematchStatus(room) {
+  const voting = room.members.filter((m) => !m.inLobby)
+  broadcast(room, {
+    type: 'rematch_status',
+    votes: voting.filter((m) => m.rematch).length,
+    total: voting.length,
+    voterIds: voting.filter((m) => m.rematch).map((m) => m.id),
+  })
 }
 
 /**
  * 开一局：lobby / results 都能开。
  * results 开下一局就是"再来一局"投票全通过后的自动开局。
+ * 开局时把所有人（包括点了「返回房间」待在大厅的人）一起拉回赛道。
  */
 function startGame(room) {
   if (room.state === 'countdown' || room.state === 'racing') return
   room.state = 'countdown'
   room.raceStartAt = 0
   resetMemberStats(room)
+  for (const m of room.members) m.inLobby = false
   broadcast(room, { type: 'countdown', seconds: COUNTDOWN_MS / 1000, startsInMs: COUNTDOWN_MS })
   if (room.countdownTimer) clearTimeout(room.countdownTimer)
   room.countdownTimer = setTimeout(() => {
@@ -372,35 +395,47 @@ function handle(session, msg) {
     if (room.state !== 'results') return fail(ws, 'BAD_MESSAGE', '这一局还没结束')
     const member = room.members.find((m) => m.id === session.id)
     if (!member) return
+    if (member.inLobby) return fail(ws, 'BAD_MESSAGE', '你已经回房间大厅了，等下一局一起跑')
     member.rematch = true
-    broadcast(room, {
-      type: 'rematch_status',
-      votes: room.members.filter((m) => m.rematch).length,
-      total: room.members.length,
-      voterIds: room.members.filter((m) => m.rematch).map((m) => m.id),
-    })
+    broadcastRematchStatus(room)
+    const voting = room.members.filter((m) => !m.inLobby)
     console.log(
-      `[room] ${room.code} ${member.nickname} 投了再来一局（${room.members.filter((m) => m.rematch).length}/${room.members.length}）`,
+      `[room] ${room.code} ${member.nickname} 投了再来一局（${voting.filter((m) => m.rematch).length}/${voting.length}）`,
     )
-    // 全员都投了 → 自动开下一局（不再需要房主点开始）
+    // 还在结算页的人都投了 → 自动开下一局（不再需要房主点开始）
     if (everyoneWantsRematch(room)) {
-      console.log(`[room] ${room.code} 全员同意再来一局，自动开下一局`)
+      console.log(`[room] ${room.code} 结算页全员同意再来一局，自动开下一局`)
       startGame(room)
     }
     return
   }
 
+  /**
+   * 结算页「返回房间」：**只把自己送回大厅**，别人的结算页照旧、比赛不打断。
+   * 点了返回的人不参与这轮投票（分母把他剔掉），开下一局时再一起拉回赛道。
+   * 如果房间里所有人都回了大厅，才把整房状态落回 lobby。
+   */
   if (msg.type === 'back_to_lobby') {
-    if (room.state === 'countdown' || room.state === 'racing' || room.state === 'results') {
-      if (room.countdownTimer) {
-        clearTimeout(room.countdownTimer)
-        room.countdownTimer = null
-      }
+    const member = room.members.find((m) => m.id === session.id)
+    if (!member) return
+    if (room.state === 'countdown' || room.state === 'racing') {
+      return fail(ws, 'BAD_MESSAGE', '这局还在跑，等结算再回大厅')
+    }
+    member.inLobby = true
+    member.rematch = false
+    send(member.ws, { type: 'back_to_lobby' })
+    console.log(`[room] ${room.code} ${member.nickname} 自己回了大厅（其他人留在结算页）`)
+
+    if (room.members.every((m) => m.inLobby)) {
+      // 都回大厅了：把房间状态落回 lobby，谁都能重新开
       room.state = 'lobby'
       resetMemberStats(room)
+      for (const m of room.members) m.rematch = false
     }
-    broadcast(room, { type: 'back_to_lobby' })
     broadcastRoomState(room)
+    broadcastRematchStatus(room)
+    // 走了一个投票人，剩下的人可能已经全票 → 直接开
+    if (room.state === 'results' && everyoneWantsRematch(room)) startGame(room)
     return
   }
 

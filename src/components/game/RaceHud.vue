@@ -123,7 +123,7 @@ const killFlash = computed(() => (props.status?.killFlash ?? 0) > 0)
         <!-- 单机：再跑一次就重开自己那一局 -->
         <button v-if="!online" class="again" @click="emit('restart')">再跑一次</button>
 
-        <!-- 多人：所有人同意再来一局才自动开局，先回房间则整房回大厅 -->
+        <!-- 多人：结算页上的人都同意才自动开局；「返回房间」只把自己送回大厅，别人不受影响 -->
         <div v-else class="actions">
           <button class="ghost" @click="emit('lobby')">返回房间</button>
           <button class="again" :class="{ voted }" :disabled="voted" @click="emit('rematch')">
@@ -131,7 +131,7 @@ const killFlash = computed(() => (props.status?.killFlash ?? 0) > 0)
           </button>
         </div>
         <div v-if="online" class="hint">
-          {{ voted ? `已同意 ${votes}/${voteTotal}，等其他人点「再来一局」` : '全员都点「再来一局」才会自动开下一局' }}
+          {{ voted ? `已同意 ${votes}/${voteTotal}，等其他人点「再来一局」` : '结算页上的人都点「再来一局」才会自动开下一局（回房间不影响别人）' }}
         </div>
       </div>
     </div>

@@ -9,12 +9,17 @@ const waiting = computed(() => room.status === 'connecting')
 /** 空位：最多画到容量，最少画 4 位，2 人房不至于看起来太空 */
 const emptySlots = computed(() => Math.max(0, Math.max(4, count.value + 2) - count.value))
 const startHint = computed(() => {
+  // 自己点了「返回房间」回来、别人还在结算页：说明一下接下来会发生什么
+  if (room.phase === 'results') {
+    return '你先回了大厅，其他人还在结算；他们全票「再来一局」就会把大家一起带回赛道'
+  }
   if (isHost.value) {
     if (count.value < room.minPlayers) return `还要再等 ${room.minPlayers - count.value} 人才能开跑`
     return `${count.value} 人就位，随时可以开跑`
   }
   return '等房主点开始…'
 })
+const midRound = computed(() => room.phase !== 'lobby')
 </script>
 
 <template>
@@ -33,6 +38,7 @@ const startHint = computed(() => {
         <span class="nick">{{ p.nickname }}</span>
         <span v-if="p.id === room.selfId" class="tag me">我</span>
         <span v-if="p.host" class="tag host">房主</span>
+        <span v-if="midRound && !p.inLobby" class="tag busy">结算中</span>
       </li>
       <li v-for="n in emptySlots" :key="`e${n}`" class="player empty">
         <span class="dot ghost" />
@@ -157,6 +163,11 @@ const startHint = computed(() => {
   margin-left: auto;
   background: rgba(255, 216, 77, 0.35);
   color: #8a6200;
+}
+
+.tag.busy {
+  background: rgba(255, 110, 209, 0.18);
+  color: #b0327f;
 }
 
 .tip {

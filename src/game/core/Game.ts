@@ -23,7 +23,7 @@ import {
 } from '@/game/combat/AttackSystem'
 import { HealthState } from '@/game/combat/Health'
 import { NameTag } from '@/game/actor/NameTag'
-import { GLOVES, gloveFist } from '@/game/physics/ObstacleField'
+import { GLOVES, gloveFist, layoutBands, layoutConflicts } from '@/game/physics/ObstacleField'
 import { TILE_GRID } from '@/game/physics/TileField'
 import { parseColor, recallColor, recallNickname } from '@/game/core/Profile'
 import { RemotePlayer } from '@/game/net/RemotePlayer'
@@ -317,6 +317,8 @@ export class Game {
                 }
               : null,
           getTrack: () => ({ length: TRACK.length, finishZ: TRACK.finishZ, spawnZ: MATCH.spawnZ }),
+          /** 自动化验收用：障碍俯视图矩形 + 重叠冲突（布局检查） */
+          getLayout: () => ({ bands: layoutBands(), conflicts: layoutConflicts() }),
           getRace: () => this.getRace(),
           getQuiz: () => this.getQuiz(),
           /** 自动化验收用：瞬移到第 i 面墙前 3 m（0 起） */
@@ -789,12 +791,18 @@ export class Game {
   }
 
   /**
-   * 被巨型拳套打飞：不扣血，但算淘汰一次。
-   * 先让人真的飞出去（击退由 applyKnockback 给的速度决定），GLOVE.flySeconds 后再回起点。
+   * 被巨型拳套打飞：**先扣光 100 血（血量归零 = 淘汰）**，人还留在半空飞 1 s，再回起点满血。
+   * 这里不走 applyDamage —— 那条路会立刻 onDeath 传送回起点，看不到"被打飞"。
    */
   private eliminatePlayer(): void {
     if (this.eliminateT > 0) return
     this.eliminateT = GLOVE.flySeconds
+    // 一拳打空血条：damage() 会把 hp 归零并累加一次死亡数
+    this.health.damage(HEALTH.max, 'obstacle')
+    this.damageLog.push({ amount: HEALTH.max, cause: 'obstacle', hpAfter: this.health.hp, dead: true })
+    if (this.damageLog.length > 20) this.damageLog.shift()
+    this.hurtFlashT = 0.45
+    this.ownTag?.setHealth(this.health.hp, HEALTH.max)
     this.interruptQuiz()
     this.deathFlashT = 1.6
     this.debugAxes = null
@@ -802,10 +810,12 @@ export class Game {
     this.attack.reset()
   }
 
-  /** 淘汰结算：回起点满血复活，并广播一次死亡（不记击杀归属） */
+  /** 淘汰结算：回起点满血复活，并广播一次死亡（不记击杀归属；死亡数在命中那一刻已经记过） */
   private respawnFromElimination(): void {
-    this.health.voidFall()
+    this.health.reset()
     this.ownTag?.setHealth(HEALTH.max, HEALTH.max)
+    // 先清掉滞空残余的横速：被打飞的同时若还叠着别的推力，复活后不该再自己往前滑
+    this.player?.halt()
     this.player?.teleport(this.spawnX, this.spawnY, this.spawnZ)
     this.player?.applyStun(0.45)
     this.followCam?.snap()

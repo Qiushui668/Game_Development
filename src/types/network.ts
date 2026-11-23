@@ -5,8 +5,9 @@
  */
 
 /** 协议版本：加血量/死亡广播后升到 3；加头顶血条的 hp 字段后升到 4；
- *  加"中途加入 / 全员结算 / 再来一局投票"后升到 5，握手不匹配直接拒绝 */
-export const PROTOCOL_VERSION = 5
+ *  加"中途加入 / 全员结算 / 再来一局投票"后升到 5；
+ *  加"个人返回大厅（inLobby）"后升到 6，握手不匹配直接拒绝 */
+export const PROTOCOL_VERSION = 6
 
 /** 房间容量：局域网 2–8 人（用户指定）；上线阶段沿用 8 */
 export const ROOM_CAPACITY = 8
@@ -26,6 +27,8 @@ export interface PlayerBrief {
   slot: number
   /** 中途加入：进来时这一局已经在跑（大厅里的人是 false / 不填） */
   lateJoin?: boolean
+  /** 自己点了"返回房间"：这个人已经回大厅，别人还在结算页（投票分母不含他） */
+  inLobby?: boolean
   /** 已经点了"再来一局"（结算页回显谁同意了） */
   rematch?: boolean
 }
@@ -58,7 +61,7 @@ export type ClientEvent =
   | { type: 'checkpoint'; index: number; t: number }
   | { type: 'finish'; t: number }
   | { type: 'ping'; t: number }
-  /** 结算后回大厅，所有人回到房间等待下一局（房主也能重开） */
+  /** 结算后"自己"回大厅（只影响自己，别人继续留在结算页；房间不关） */
   | { type: 'back_to_lobby' }
   /** 结算面板点"再来一局"：全员都投了票，服务器自动开下一局 */
   | { type: 'rematch' }
@@ -115,6 +118,7 @@ export type ServerEvent =
   | { type: 'take_hit'; fromId: string; kind: NetAttackKind; x: number; z: number }
   /** 有人死了：受害者回起点满血；killerId 与自己的 id 相同就记一次击杀 + 播击杀音效 */
   | { type: 'player_died'; playerId: string; killerId: string | null }
+  /** 只发给点了「返回房间」的那个人：他也回到大厅了，其他人不受影响 */
   | { type: 'back_to_lobby' }
   | { type: 'error'; code: string; message: string }
 

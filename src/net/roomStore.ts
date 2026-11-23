@@ -94,9 +94,12 @@ roomClient.onServer((ev) => {
     case 'hello':
       room.selfId = ev.id
       break
-    case 'room_state':
-      // 关键：只有大厅阶段才回到首页；racing / countdown / results 都留在游戏里
-      room.status = ev.state === 'lobby' ? 'lobby' : 'playing'
+    case 'room_state': {
+      // 关键：只有大厅阶段 / 自己点了"返回房间"才回首页；
+      // racing / countdown / results 对其他人依旧是留在游戏里
+      const self = ev.players.find((p) => p.id === room.selfId)
+      const selfInLobby = !!self?.inLobby
+      room.status = selfInLobby || ev.state === 'lobby' ? 'lobby' : 'playing'
       room.phase = ev.state
       room.code = ev.code
       room.hostId = ev.hostId
@@ -105,6 +108,7 @@ roomClient.onServer((ev) => {
       joined = true
       room.error = ''
       break
+    }
     case 'player_joined':
       room.players = [...room.players.filter((p) => p.id !== ev.player.id), ev.player]
       if (ev.player.id === room.selfId && ev.player.lateJoin) room.lateJoin = true
@@ -147,6 +151,7 @@ roomClient.onServer((ev) => {
       }
       break
     case 'back_to_lobby':
+      // 只发给自己：回了大厅但房间没关，别人的结算页不受影响
       room.status = 'lobby'
       room.phase = 'lobby'
       clearRound()
@@ -197,7 +202,7 @@ export function startGame(): void {
   roomClient.send({ type: 'start_game' })
 }
 
-/** 结算面板点"返回房间"：所有人回大厅（不关房间） */
+/** 结算面板点"返回房间"：只把自己送回大厅，其他人留在结算页（房间不关） */
 export function backToLobby(): void {
   roomClient.send({ type: 'back_to_lobby' })
   room.status = 'lobby'

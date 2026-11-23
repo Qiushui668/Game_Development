@@ -71,10 +71,10 @@ Game_Development/
 │  │  ├─ data/   questions.ts（由 `tools/build_questions.py` 从 Excel 生成，勿手改）
 │  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃/F/左右键攻击的边沿触发）
 │  │  └─ utils/  MathUtils
-│  └─ types/     network.ts（协议 v5：位置 / 血量 `h` / 攻击 / 死亡 / 榜单 / 房间阶段 / 中途加入 / 全员结算 / 再来一局 / 房间列表）
+│  └─ types/     network.ts（协议 v6：位置 / 血量 `h` / 攻击 / 死亡 / 榜单 / 房间阶段 / 中途加入 / 全员结算 / 再来一局 / 个人回大厅 `inLobby` / 房间列表）
 ├─ public/audio/ danzai.mp3（背景音乐）/ kill.mp3（1杀音效）
-├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
-├─ tools/        smoke_room.mjs（服务端协议 23 项）/ verify_m7.py（双客户端 31 项）/ verify_m8.py（B1.5 14 项）/ verify_m9.py（B1.6 17 项）/ perf_probe.py / verify_m2…m6.py / build_questions.py
+├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT / layout_b19.html（赛道障碍俯视图，由 tools/gen_layout_map.py 从真实布局生成）
+├─ tools/        smoke_room.mjs（服务端协议 23 项）/ verify_m7.py（双客户端 31 项）/ verify_m8.py（B1.5 14 项）/ verify_m9.py（B1.6 17 项）/ verify_b18.py（B1.8+B1.9 39 项）/ perf_probe.py / dump_layout_b19.py / gen_layout_map.py / verify_m2…m6.py / build_questions.py
 └─ .venv/
 ```
 
@@ -151,6 +151,12 @@ Game_Development/
 | 拳套打飞后还想接着跑 | 淘汰只做了击退 | 命中带 `eliminate: true`：`Game.eliminatePlayer()` 记滞空 1 s（`GLOVE.flySeconds`）→ `respawnFromElimination()` 回起点满血 + 广播 `died{killerId:null}`，这 1 s 里不吃输入 |
 | 拳套看着像"棒棒糖"（细杆顶个球，不像拳击手套） | 手臂半径 0.46 对上 1.5 m 的拳套太细；本体只有一颗球，没有指节/拇指/宽袖口 | 手臂加粗到 0.82（粗机械臂），本体加 4 道指节小球 + 拇指，袖口加宽到 0.72R / 0.95R 并加两道束带；待机时整只缩在墙面，出拳才整只探出 |
 | 拳套静止时悬在跑道半空、看着没挂在墙上 | 旧视觉给拳心加了 0.9 m 固定内推，判定却按"拳心贴墙" | 视觉与判定统一用 `shift = extend × reach − wind × 0.8`：0 时整只收进墙里，手臂长度 = `shift − 0.9R`，露不出来就 `visible = false` |
+| 拳套淘汰要"扣满 100 血"但走 `applyDamage` 会瞬移 | `applyDamage` 命中就 `onDeath` 立即传送，1 s 飞行过程根本看不到 | `Game.eliminatePlayer()` 直接 `health.damage(HEALTH.max,'obstacle')` 把血扣光（写 `damageLog`、闪红、死亡数 +1）再飞；`respawnFromElimination()` 用 `health.reset()`（不是 `voidFall()`，避免死亡数重复 +1） |
+| 一个人点「返回房间」，整房人全被踢回大厅 | 旧 `back_to_lobby` 是"整房 reset + 全场广播" | 服务端只把自己标 `inLobby`、清自己的 `rematch`，`back_to_lobby` **只发本人**，另广播 `room_state`（带 `inLobby`）与 `rematch_status`；全员 `inLobby` 才把 `room.state` 落回 `lobby`。客户端按 `self.inLobby || state==='lobby'` 决定回不回首页，否则结算页上的人会被别人一脚踢回首页 |
+| 回大厅的人还算在"再来一局"分母里 → 永远开不了下一局 | 投票总数把不在结算页的人也算上了 | `broadcastRematchStatus` / `everyoneWantsRematch` 只统计 `!inLobby` 的人（分母剔除回大厅者）；`startGame` 开局前把所有人 `inLobby = false`，回大厅的人也一起被带回赛道 |
+| 起跑道拳套和旋转柱子 / 栏架 / 大摆锤叠在一起 | 4 只拳套的 z 是按赛道长度均分的，没有和既有障碍对表；`reach` 7 m 时拳心最内到 x≈±2，中线只剩 0.2 m | 4 只重排到 `-11 / -139.9 / -183.5 / -243.6`（右→左→右→左，起跑那只贴右墙、避开 -22 扫地杆从 -15.8 起扫的区域），`reach` 降到 6.5（中线留 ≥0.55 m）；扫地杆 4 从 -166 挪到 -168.5（原与 -160 摆锤只差 0.3 m）；新增 `ObstacleField.layoutBands()/layoutConflicts()` 把扫地杆扫掠圆、滚轴、地刺、摆锤摆幅、栏架、拳套全探出矩形、答题墙都投影到 z 轴，验收里断言两两不重叠（eps 0.05 m），并把 4 只的滑幅按缝隙收窄（2.2 / 1.0 / 2.2 / 2.6），最近间隙提到 ≥0.8 m |
+| 拳套淘汰后"复活了还自己往前滑十几米" | 被打飞的同时身上还叠着别的推力（击退 / 回弹速度），`respawnFromElimination()` 只 teleport + `applyStun`，残余横速在复活后才生效 | 复活前先 `player.halt()` 把横速清零再 teleport（m9 里"推人 31 m/s + 拳套当场打飞"实测会从起点滑到 z≈14.4） |
+| m9 的"回弹初速"量点突然多飞 2.5 m（12.33 → 14.84，命中 hp 变 0） | 起跑道拳套挪到右墙 z≈-11 后，老量点 (1.5, -8) 正好落在它的出拳范围里，"纯速度衰减"被人打飞打断 | 量点固定走左半边 `x=-4.5`（拳套只探到 x≥1）；消失格同理钉在 `idxAt(-4.5, -11.5)` |
 
 ## 6. Git
 

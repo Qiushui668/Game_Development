@@ -1,6 +1,6 @@
 {
   "url": "http://localhost:5173/",
-  "collectedAt": "2026-11-23 16:07:28",
+  "collectedAt": "2026-11-23 17:10:35",
   "pass": true,
   "results": [
     {
@@ -41,12 +41,12 @@
     {
       "name": "下方列出在线房间（带人数 / 阶段）",
       "ok": true,
-      "detail": "[{\"code\": \"5537\", \"people\": \"1/8 人\", \"phase\": \"等人中\", \"full\": false}]"
+      "detail": "[{\"code\": \"5991\", \"people\": \"1/8 人\", \"phase\": \"等人中\", \"full\": false}]"
     },
     {
       "name": "点房间卡片直接进房（进大厅，房间号一致）",
       "ok": true,
-      "detail": "{\"lobby\": true, \"code\": \"5537\", \"players\": 2, \"startDisabled\": null, \"startText\": \"\"}"
+      "detail": "{\"lobby\": true, \"code\": \"5991\", \"players\": 2, \"startDisabled\": null, \"startText\": \"\"}"
     },
     {
       "name": "离开房间回到首页",
@@ -54,14 +54,14 @@
       "detail": ""
     },
     {
-      "name": "赛道两侧一共 4 只巨型拳套（左右交替）",
+      "name": "赛道两侧一共 4 只巨型拳套（左右交替、前后拉开）",
       "ok": true,
-      "detail": "[{\"side\": -1, \"zCenter\": -13, \"zRange\": 7}, {\"side\": 1, \"zCenter\": -126, \"zRange\": 6}, {\"side\": -1, \"zCenter\": -206, \"zRange\": 5.5}, {\"side\": 1, \"zCenter\": -280, \"zRange\": 6}]"
+      "detail": "[{\"side\": 1, \"zCenter\": -11, \"zRange\": 2.2}, {\"side\": -1, \"zCenter\": -139.9, \"zRange\": 1}, {\"side\": 1, \"zCenter\": -183.5, \"zRange\": 2.2}, {\"side\": -1, \"zCenter\": -243.6, \"zRange\": 2.6}]"
     },
     {
       "name": "拳套沿 Z 前后滑动（3 s 内位移 > 2 m），且不越出各自滑轨",
       "ok": true,
-      "detail": "z -15.45 → -12.39 inRange=True"
+      "detail": "z -11.09 → -8.80 inRange=True"
     },
     {
       "name": "拳套随机出拳：探出比例在 0–1 之间来回",
@@ -69,19 +69,34 @@
       "detail": "extend 0.00 – 1.00"
     },
     {
+      "name": "障碍俯视图两两不重叠（含拳套与扫地杆/滚轴/地刺/栏架/答题墙）",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "拳套都挂在墙上、避开赛道中线（中间留得下一条跑道）",
+      "ok": true,
+      "detail": "[{\"name\": \"拳套1\", \"xMin\": 1, \"xMax\": 9, \"zMin\": -14.7, \"zMax\": -7.300000000000001}, {\"name\": \"拳套2\", \"xMin\": -9, \"xMax\": -1, \"zMin\": -142.4, \"zMax\": -137.4}, {\"name\": \"拳套3\", \"xMin\": 1, \"xMax\": 9, \"zMin\": -187.2, \"zMax\": -179.8}, {\"name\": \"拳套4\", \"xMin\": -9, \"xMax\": -1, \"zMin\": -247.7, \"zMax\": -239.5}]"
+    },
+    {
       "name": "被拳套打飞 → 记一次淘汰（deaths +1）",
       "ok": true,
-      "detail": "{\"hit\": {\"extend\": 1, \"at\": 2578.5}, \"before\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 0, \"hurtFlash\": 0, \"deathFlash\": 0, \"killFlash\": 0}, \"after\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 1, \"hurtFlash\": 0, \"deathFlash\": 0, \"killFlash\": 0}}"
+      "detail": "{\"hit\": {\"extend\": 0.7732426303854649, \"at\": 1381.4000000003725, \"hp\": 0}, \"before\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 0, \"hurtFlash\": 0, \"deathFlash\": 0, \"killFlash\": 0}, \"after\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 1, \"hurtFlash\": 0, \"deathFlash\": 0.050000000000000766, \"killFlash\": 0}}"
     },
     {
       "name": "打飞只在拳头真伸出来时判定（extend ≥ 0.6）",
       "ok": true,
-      "detail": "{\"extend\": 1, \"at\": 2578.5}"
+      "detail": "{\"extend\": 0.7732426303854649, \"at\": 1381.4000000003725, \"hp\": 0}"
+    },
+    {
+      "name": "打飞时先扣光 100 血（血条归零）",
+      "ok": true,
+      "detail": "{\"extend\": 0.7732426303854649, \"at\": 1381.4000000003725, \"hp\": 0}"
     },
     {
       "name": "淘汰后回起点复活（z≈3.5、满血）",
       "ok": true,
-      "detail": "{\"x\": 0, \"y\": 0.019981658458709695, \"z\": 3.5}"
+      "detail": "{\"x\": 0, \"y\": 0.01998171806335447, \"z\": 3.499999523162842}"
     },
     {
       "name": "鼠标侧键（后退/前进键）被拦下",
@@ -106,47 +121,47 @@
     {
       "name": "出拳瞬间拳头真正伸进赛道（extend > 0.9）",
       "ok": true,
-      "detail": "{\"extend\": 1, \"z\": -7.255000000000087}"
+      "detail": "{\"extend\": 0.9401175079085455, \"z\": -9.755833333333298}"
     },
     {
       "name": "建房后进大厅并显示房间号",
       "ok": true,
-      "detail": "{\"entered\": true, \"created\": true, \"lobby\": true, \"code\": \"4437\", \"players\": 1, \"startDisabled\": true, \"startText\": \"开始游戏\"}"
+      "detail": "{\"entered\": true, \"created\": true, \"lobby\": true, \"code\": \"2693\", \"players\": 1, \"startDisabled\": true, \"startText\": \"开始游戏\"}"
     },
     {
       "name": "第二个人进房后大厅显示 2 人并可开始",
       "ok": true,
-      "detail": "{\"lobby\": true, \"code\": \"4437\", \"players\": 2, \"startDisabled\": false, \"startText\": \"开始游戏\"}"
+      "detail": "{\"lobby\": true, \"code\": \"2693\", \"players\": 2, \"startDisabled\": false, \"startText\": \"开始游戏\"}"
     },
     {
       "name": "比赛中途加入：新人直接收到\"这局跑到哪了\"",
       "ok": true,
-      "detail": "{\"type\": \"game_state\", \"state\": \"racing\", \"elapsedMs\": 3647}"
+      "detail": "{\"type\": \"game_state\", \"state\": \"racing\", \"elapsedMs\": 3649}"
     },
     {
       "name": "房主画面人数跟着变（3 人）",
       "ok": true,
-      "detail": "{\"inGame\": true, \"badge\": \"房间 4437 · 3 人\", \"race\": \"Racing\", \"result\": null, \"backHome\": false}"
+      "detail": "{\"inGame\": true, \"badge\": \"房间 2693 · 3 人\", \"race\": \"Racing\", \"result\": null, \"backHome\": false}"
     },
     {
       "name": "有人退出后仍在比赛中（没被踢回首页 / 没关房）",
       "ok": true,
-      "detail": "{\"inGame\": true, \"badge\": \"房间 4437 · 2 人\", \"race\": \"Racing\", \"result\": null, \"backHome\": false}"
+      "detail": "{\"inGame\": true, \"badge\": \"房间 2693 · 2 人\", \"race\": \"Racing\", \"result\": null, \"backHome\": false}"
     },
     {
       "name": "别人冲线后自己（还在跑）也弹结算",
       "ok": true,
-      "detail": "{\"hasGhost\": true, \"hasAgain\": true, \"againText\": \"再来一局\", \"hint\": \"全员都点「再来一局」才会自动开下一局\", \"rows\": 2, \"score\": \"未完成\"}"
+      "detail": "{\"hasGhost\": true, \"hasAgain\": true, \"againText\": \"再来一局\", \"hint\": \"结算页上的人都点「再来一局」才会自动开下一局（回房间不影响别人）\", \"rows\": 2, \"score\": \"未完成\"}"
     },
     {
       "name": "结算面板有「返回房间」和「再来一局」两个按钮",
       "ok": true,
-      "detail": "{\"hasGhost\": true, \"hasAgain\": true, \"againText\": \"再来一局\", \"hint\": \"全员都点「再来一局」才会自动开下一局\", \"rows\": 2, \"score\": \"未完成\"}"
+      "detail": "{\"hasGhost\": true, \"hasAgain\": true, \"againText\": \"再来一局\", \"hint\": \"结算页上的人都点「再来一局」才会自动开下一局（回房间不影响别人）\", \"rows\": 2, \"score\": \"未完成\"}"
     },
     {
-      "name": "结算面板写明\"全员同意才开下一局\"",
+      "name": "结算面板写明\"结算页上的人才需要点再来一局\"",
       "ok": true,
-      "detail": "全员都点「再来一局」才会自动开下一局"
+      "detail": "结算页上的人都点「再来一局」才会自动开下一局（回房间不影响别人）"
     },
     {
       "name": "点了再来一局后显示\"已同意 1/2\"，自己不能再点",
@@ -161,7 +176,27 @@
     {
       "name": "全员同意后自动开下一局（结算面板消失、重新倒数/起跑）",
       "ok": true,
-      "detail": "{\"inGame\": true, \"badge\": \"房间 4437 · 2 人\", \"race\": \"Countdown\", \"result\": null, \"backHome\": false}"
+      "detail": "{\"inGame\": true, \"badge\": \"房间 2693 · 2 人\", \"race\": \"Countdown\", \"result\": null, \"backHome\": false}"
+    },
+    {
+      "name": "第二局一样：一个人冲线就全场结算",
+      "ok": true,
+      "detail": "{\"hasGhost\": true, \"hasAgain\": true, \"againText\": \"再来一局\", \"hint\": \"结算页上的人都点「再来一局」才会自动开下一局（回房间不影响别人）\", \"rows\": 2, \"score\": \"未完成\"}"
+    },
+    {
+      "name": "点「返回房间」→ 自己回到房间大厅（房间没关）",
+      "ok": true,
+      "detail": "{\"inGame\": true, \"badge\": null, \"race\": \"Result\", \"result\": null, \"backHome\": true}"
+    },
+    {
+      "name": "别人不会跟着回大厅（back_to_lobby 不广播给全场）",
+      "ok": true,
+      "detail": "leaked=False"
+    },
+    {
+      "name": "回了大厅也不挡开局：剩下的人都同意就自动开，并把我一起带回赛道",
+      "ok": true,
+      "detail": "{\"inGame\": true, \"badge\": \"房间 2693 · 2 人\", \"race\": \"Countdown\", \"result\": null, \"backHome\": false}"
     }
   ]
 }

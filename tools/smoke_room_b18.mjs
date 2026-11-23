@@ -140,14 +140,23 @@ async function main() {
   await sleep(300)
   check('一票时没有 countdown', !a.inbox.slice(markA4).some(byType('countdown')))
 
-  a.send({ type: 'rematch' })
+  // ---------- 需求 2b：个人「返回房间」只把自己送回大厅，不广播给全场 ----------
   const markA5 = a.inbox.length
-  const v2 = await a.wait(byType('rematch_status'), 3000, markA5)
-  check('两票齐了', v2.votes === 2 && v2.total === 2)
-  const cd2 = await a.wait(byType('countdown'), 4000, markA4)
-  check('全员同意后自动开下一局（countdown）', cd2.seconds === 3)
-  await a.wait(byType('game_started'), 6000, markA4)
-  check('再来一局真的开跑', true)
+  const markB5 = c.inbox.length
+  // 此时 c 已投票（1/2）；a 没投，直接点「返回房间」→ 分母只剩 c，票数已经凑满
+  a.send({ type: 'back_to_lobby' })
+  const aBack = await a.wait(byType('back_to_lobby'), 4000, markA5)
+  check('点「返回房间」的人自己收到 back_to_lobby', aBack.type === 'back_to_lobby')
+  await sleep(400)
+  check('别人不会跟着回大厅（没有广播 back_to_lobby）', !c.inbox.slice(markB5).some(byType('back_to_lobby')))
+
+  const v2 = await c.wait(byType('rematch_status'), 3000, markB5)
+  check('回大厅的人不参与投票：分母只剩结算页上的人', v2.total === 1, `total=${v2.total}`)
+  check('结算页上的人都同意 → 凑满票数', v2.votes === 1, `votes=${v2.votes}`)
+  const cd2 = await a.wait(byType('countdown'), 4000, markA5)
+  check('回了大厅也不挡开局：剩下的人都同意就自动开（countdown）', cd2.seconds === 3)
+  await a.wait(byType('game_started'), 6000, markA5)
+  check('再来一局真的开跑（回大厅的人也被一起带回赛道）', true)
 
   // ---------- 中途加入的人也能一起再来一局 ----------
   const markC2 = c.inbox.length
