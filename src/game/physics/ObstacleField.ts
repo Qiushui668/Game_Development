@@ -447,15 +447,14 @@ export interface LayoutBand {
   zMax: number
 }
 
-/** 浮桥单块在俯视图上的最大占位（左右摆到两端时会扫过的整条带） */
+/** 浮桥单块在俯视图上的最大占位（左右扫到两端时会扫过的整条带；6 块共用同一条边界） */
 export function bridgePlatformBand(index: number): LayoutBand {
   const cz = BRIDGE.firstZ - index * BRIDGE.pitch
-  const cx = index % 2 === 0 ? -BRIDGE.offsetX : BRIDGE.offsetX
-  const halfW = BRIDGE.width / 2 + BRIDGE.amplitudeX
+  const halfW = BRIDGE.width / 2 + BRIDGE.swingX
   return {
     name: `浮桥${index + 1}`,
-    xMin: cx - halfW,
-    xMax: cx + halfW,
+    xMin: -halfW,
+    xMax: halfW,
     zMin: cz - BRIDGE.depth / 2,
     zMax: cz + BRIDGE.depth / 2,
   }

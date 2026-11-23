@@ -64,7 +64,7 @@ Game_Development/
 │  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World / QuizWalls（答题空气墙）
 │  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）/ NameTag（头顶两行 Sprite：血条 + 血量数字 + 昵称）
 │  │  ├─ net/    RemotePlayer（远端果冻人 + 100 ms 插值缓冲 + 自己的名牌与血条）
-│  │  ├─ physics/ ObstacleField（扫地杆/滚轴/地刺/摆锤/**巨型拳套**布局 + 命中判定，纯 TS，服务端可复用）/ TileField（全赛道 684 块方格：逐格随机身份 + 塌陷/回弹状态机 + 浮桥段固定挖空 `gap`，纯 TS）/ BridgeField（答题墙 2→3 之间 6 块横移浮桥的位置与"载人"位移，纯 TS，服务端可复用）
+│  │  ├─ physics/ ObstacleField（扫地杆/滚轴/地刺/摆锤/**巨型拳套**布局 + 命中判定，纯 TS，服务端可复用）/ TileField（全赛道 684 块方格：逐格随机身份 + 塌陷/回弹状态机 + 浮桥段固定挖空 `gap`，纯 TS）/ BridgeField（答题墙 2→3 之间 6 块浮桥：三角波匀速往返 + 奇偶镜像起步的位置函数，与"载人"位移，纯 TS，服务端可复用）
 │  │  ├─ quiz/   QuizSystem（墙位 / 抽题 / 冻结读秒，纯 TS，服务端可复用）
 │  │  ├─ combat/ AttackSystem（出招状态机 + 击倒规则 + 判定距离）/ Health（血量与伤害表，纯 TS）
 │  │  ├─ audio/  Music（单条 audio 循环 + 答题 duck）/ Sfx（击杀音效，元素池支持连杀叠加）
@@ -73,8 +73,8 @@ Game_Development/
 │  │  └─ utils/  MathUtils
 │  └─ types/     network.ts（协议 v6：位置 / 血量 `h` / 攻击 / 死亡 / 榜单 / 房间阶段 / 中途加入 / 全员结算 / 再来一局 / 个人回大厅 `inLobby` / 房间列表）
 ├─ public/audio/ danzai.mp3（背景音乐）/ kill.mp3（1杀音效）
-├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT / layout_b20.html（赛道障碍俯视图，由 tools/gen_layout_map_b20.py 从真实布局生成）
-├─ tools/        smoke_room.mjs（服务端协议 23 项）/ smoke_room_b18.mjs（服务端 26 项）/ verify_m7.py（双客户端 31 项）/ verify_m8.py（B1.5 14 项）/ verify_m9.py（B1.6 17 项）/ verify_b18.py（B1.8+B1.9 39 项）/ verify_b20.py（B2.0 27 项）/ perf_probe.py / dump_layout_b19.py / dump_layout_b20.py / gen_layout_map.py / verify_m2…m6.py / build_questions.py
+├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT / layout_b20.html（赛道障碍俯视图，由 tools/gen_layout_map_b20.py 从真实布局生成）/ bridge_swing.html（浮桥 x(t) 实测轨迹）
+├─ tools/        smoke_room.mjs（服务端协议 23 项）/ smoke_room_b18.mjs（服务端 26 项）/ verify_m7.py（双客户端 31 项）/ verify_m8.py（B1.5 14 项）/ verify_m9.py（B1.6 17 项）/ verify_b18.py（B1.8+B1.9 39 项）/ verify_b20.py（B2.0 31 项）/ probe_swing_b20.py（浮桥轨迹采样）/ gen_swing_chart_b20.py（轨迹图）/ perf_probe.py / dump_layout_b19.py / dump_layout_b20.py / gen_layout_map.py / verify_m2…m6.py / build_questions.py
 └─ .venv/
 ```
 
@@ -159,8 +159,11 @@ Game_Development/
 | m9 的"回弹初速"量点突然多飞 2.5 m（12.33 → 14.84，命中 hp 变 0） | 起跑道拳套挪到右墙 z≈-11 后，老量点 (1.5, -8) 正好落在它的出拳范围里，"纯速度衰减"被人打飞打断 | 量点固定走左半边 `x=-4.5`（拳套只探到 x≥1）；消失格同理钉在 `idxAt(-4.5, -11.5)` |
 | B2.0：自机颜色永远是青色，别人看自己却是自己选的色 | `Game` 初始化里 `if (this.net) jelly.setColor(0x2fe0d6)` 把自机身体颜色写死；单机时连自己的 `NameTag` 都不用存档色；远端 `RemotePlayer` 却老老实实用 `peer.color` | 自机颜色统一走 `ownColor = normalizeColor(net?.color) \|\| recallOrPickColor()`，身体、头顶名牌、网络上报三处同一个 hex；`Profile` 新增 `normalizeColor / randomCrowdColor / recallOrPickColor`（没存档就随机一个并 `saveColor`），服务端 `cleanColor` 也改成随机兜底 |
 | B2.0：存档字段被 TS 收窄成字面量类型报 TS2322 | `private ownColorHex = COLORS.jellyBody` 在 `as const` 下被推成 `3137750` 字面量 | 显式写 `private ownColorHex: number = COLORS.jellyBody` |
-| B2.0：浮桥上的角色站着不动就掉下去（kinematic 平台不带着走） | `KinematicCharacterController` 只解碰撞、不继承平台速度（与"移动平台带不走角色"同一个根因） | `BridgeField.carryDelta()` 每步算出"人是否站在板上 + 本步 dx"，`Game.onFixedUpdate` 在 `player.prepare` 前调 `player.carryX(dx)`（只平移、不动速度）；验收里 2.5 s 平台走 3.8 m，人的横向漂移 < 0.1 m |
+| B2.0：浮桥上的角色站着不动就掉下去（kinematic 平台不带着走） | `KinematicCharacterController` 只解碰撞、不继承平台速度（与"移动平台带不走角色"同一个根因） | `BridgeField.carryDelta()` 每步算出"人是否站在板上 + 本步 dx"，`Game.onFixedUpdate` 在 `player.prepare` 前调 `player.carryX(dx)`（只平移、不动速度）；验收里 2.5 s 平台走 1.3–1.7 m（0.67 m/s），人的横向漂移 < 0.1 m |
 | B2.0：6 块浮桥只建了一次 geometry，dispose 时把整段桥一起删掉 | `buildBridge()` 里 6 块板共用同一份几何体，`dispose()` 里按块 `geo.dispose()` | 共享几何体只在 `World.dispose()` 里随世界一起释放，单块不做 dispose |
+| B2.0 调整：浮桥要"1 左 2 右交叉起步 + 匀速扫、到边界立刻反向" | 原来用 `sin()` 相位错开：速度两头慢中间快、相邻两块落差只有 2.4 m，且起步姿态不可控（受 `elapsed` 影响） | `positionOf` 换成三角波 `u = phase<0.5 ? 1-4*phase : -3+4*phase`，板心 `x = side·swingX·u`，`side = i%2 ? +1 : -1`；`travelSeconds=3`、`swingX=2`。`reset()` 把相位归零 → 每局开局必是「1/3/5 最左、2/4/6 最右」；`BRIDGE.offsetX / amplitudeX / periodSeconds / phaseStep` 全部删除 |
+| B2.0 调整：删掉旧摆动字段后 typecheck 挂住 | `Game.getBridge()` 调试钩子还在读 `BRIDGE.amplitudeX / periodSeconds / offsetX`（这些常量已不存在） | 钩子同步成 `swingX / travelSeconds`，并新增 `resetBridge()` 钩子（验收脚本靠它把相位归零、断言"1 左 2 右"起步姿态） |
+| B2.0 调整：验收脚本采样撞上折返点误判 | 三角波在边界处速度瞬间反号，只取两个时刻容易正好落在折返点 | `verify_b20.py` 改成每 100 ms 采样 6.6 s（覆盖一个完整往返），再断言"转向点都出现在 ±2 m 附近""每步位移稳定""相邻两块 x 互为相反数""横向落差 ≤4 m 且存在对齐窗口" |
 | B2.0：挖空的格子还会被抽签 / 被 `clearTiles` 改成实心，人又能站上去 | `TileField` 的 reset / 保底 fill / `clearSpecial` / `probe` 都按索引遍历 | 新增 `readonly gap: boolean[]`（`def.z` 落在 `BRIDGE.gapZEnd..gapZStart` 之间），`isGap()` 的格子在 reset / fill / probe / update / setRole / visual 里全部跳过，`buildTiles()` 也不给它建碰撞体；`snapshot()` 多一个 `gap` 字段供验收断言 |
 
 ## 6. Git

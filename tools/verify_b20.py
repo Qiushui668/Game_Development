@@ -68,8 +68,8 @@ SWING_JS = """(async (ms) => {
   const out = [];
   const until = performance.now() + ms;
   while (performance.now() < until) {
-    out.push(P.getBridge().platforms.map(p => ({ x: p.x, cx: p.cx, z: p.z })));
-    await new Promise(r => setTimeout(r, 250));
+    out.push(P.getBridge().platforms.map(p => ({ x: p.x, side: p.side, z: p.z })));
+    await new Promise(r => setTimeout(r, 100));
   }
   return out;
 })"""
@@ -164,23 +164,62 @@ async def run(args: argparse.Namespace) -> int:
             "",
         )
 
-        swing = await p1.js(f"({SWING_JS})(5400)")
-        amp = [max(abs(row[i]["x"] - row[i]["cx"]) for row in swing) for i in range(len(swing[0]))]
+        # 起步姿态：把往返相位归零，第 1/3/5 块在最左、第 2/4/6 块在最右
+        start = await p1.js(
+            "(() => { window.__PPR.resetBridge();"
+            " const b = window.__PPR.getBridge();"
+            " return { swingX: b.swingX, travel: b.travelSeconds,"
+            " platforms: b.platforms.map(p => ({ side: p.side, x: p.x, z: p.z })) }; })()"
+        )
+        outset = [abs(p["x"] - p["side"] * start["swingX"]) for p in start["platforms"]]
         check(
-            "6 块浮桥都在横向左右摆（一个周期内摆幅 > 1.5 m）",
-            all(a > 1.5 for a in amp),
-            json.dumps([round(a, 2) for a in amp]),
+            "开局姿态：第 1/3/5 块在最左、第 2/4/6 块在最右",
+            max(outset) < 0.35 and all(abs(p["x"]) > start["swingX"] - 0.35 for p in start["platforms"]),
+            json.dumps([round(p["x"], 2) for p in start["platforms"]]),
+        )
+
+        swing = await p1.js(f"({SWING_JS})(6600)")
+        xs = [[row[i]["x"] for row in swing] for i in range(len(swing[0]))]
+        check(
+            "6 块都在横向左右扫（每块都到过两端 ±2 m）",
+            all(max(abs(v) for v in col) >= 1.85 for col in xs),
+            json.dumps([[round(min(c), 2), round(max(c), 2)] for c in xs]),
         )
         check(
-            "摆幅不超过设定的 ±1.9 m",
-            all(a <= 1.9 + 0.25 for a in amp) and all(a > 0.5 for a in amp),
-            f"max={max(amp):.2f}",
+            "扫的范围不越过 ±2 m 的边界",
+            all(max(abs(v) for v in col) <= 2.05 for col in xs),
+            json.dumps([round(max(abs(v) for v in col), 2) for col in xs]),
+        )
+        # 三角波（匀速 + 到边界才反向）：所有转向点都发生在 |x| ≈ swingX 的边界上
+        turns = []
+        for col in xs:
+            idx = [k for k in range(1, len(col) - 1) if (col[k] - col[k - 1]) * (col[k + 1] - col[k]) < 0]
+            turns.append([abs(col[k]) for k in idx])
+        check(
+            "每块都在边界处自动反向（转向点都在 ±2 m 附近）",
+            all(len(t) >= 1 for t in turns) and all(v >= 1.75 for t in turns for v in t),
+            json.dumps([[round(v, 2) for v in t] for t in turns]),
+        )
+        steps = [abs(col[k + 1] - col[k]) for col in xs for k in range(len(col) - 1)]
+        steps_sorted = sorted(steps)
+        median = steps_sorted[len(steps_sorted) // 2]
+        check(
+            "边界之间匀速扫（每步位移稳定，不忽快忽慢）",
+            median > 0.04 and max(steps) < median * 2.5,
+            f"median={median:.3f} max={max(steps):.3f}",
+        )
+        mirror = [max(abs(row[i]["x"] + row[i + 1]["x"]) for row in swing) for i in range(len(swing[0]) - 1)]
+        check(
+            "相邻两块镜像行走（一左一右反着扫）",
+            max(mirror) <= 0.2,
+            json.dumps([round(v, 2) for v in mirror]),
         )
         lat = [max(abs(row[i]["x"] - row[i + 1]["x"]) for row in swing) for i in range(len(swing[0]) - 1)]
+        lat_min = [min(abs(row[i]["x"] - row[i + 1]["x"]) for row in swing) for i in range(len(swing[0]) - 1)]
         check(
-            "相邻两块横向错位 ≤ 3.1 m（一跳够得着）",
-            max(lat) <= 3.1,
-            json.dumps([round(v, 2) for v in lat]),
+            "相邻两块横向落差 ≤ 4 m，且存在对齐窗口（一跳够得着）",
+            max(lat) <= 4.1 and max(lat_min) <= 1.2,
+            json.dumps({"max": [round(v, 2) for v in lat], "min": [round(v, 2) for v in lat_min]}),
         )
 
         carry = await p1.js(f"({CARRY_JS})()")

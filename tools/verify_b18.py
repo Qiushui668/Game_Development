@@ -293,6 +293,19 @@ async def ui_click(cdp: Cdp, selector: str, timeout: float = 8.0) -> bool:
     return False
 
 
+async def wait_home(cdp: Cdp, timeout: float = 15.0) -> None:
+    """等 reload 之后的页面真正落定（.whoami 或 .gate 出现），避免在旧执行上下文里读 DOM。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        ok = await cdp.eval_js(
+            "(() => !!(document.querySelector('.whoami') || document.querySelector('.gate-input')))()"
+        )
+        if ok:
+            await asyncio.sleep(0.3)
+            return
+        await asyncio.sleep(0.25)
+
+
 async def shoot(cdp: Cdp, js: str, png: Path, wait_s: float = 0.2) -> None:
     await cdp.eval_js(js, timeout_s=60)
     await asyncio.sleep(wait_s)
@@ -406,7 +419,7 @@ async def main() -> int:
 
             # 刷新页面：1 小时有效期内不该再让填
             await cdp.eval_js('location.reload()')
-            await asyncio.sleep(2.0)
+            await wait_home(cdp)
             reloaded = await cdp.eval_js(GATE_JS)
             check('有效期内刷新页面：直接跳过昵称门', reloaded['hasInput'] is False and '验收员' in (reloaded['whoami'] or ''),
                   json.dumps(reloaded, ensure_ascii=False))
@@ -420,7 +433,7 @@ async def main() -> int:
                 "localStorage.setItem('ppr:nicknameAt', String(Date.now() - 2 * 60 * 60 * 1000))"
             )
             await cdp.eval_js('location.reload()')
-            await asyncio.sleep(2.0)
+            await wait_home(cdp)
             expired = await cdp.eval_js(GATE_JS)
             check('昵称过期 1 小时后：回到昵称门且输入框依然为空',
                   expired['hasInput'] is True and expired['value'] == '' and expired['goDisabled'] is True,

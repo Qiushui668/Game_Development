@@ -376,6 +376,8 @@ draw / tri 的变化来自"拆一个平面、换一套实例"：
 
 > 配色改动（B2.0 需求 2）只涉及初始化时读一次 `localStorage` 与一次 `parseInt`，不新增 draw / tri / 每帧开销。
 
+> 摆动口径改成「奇偶镜像起步 + 三角波匀速往返」（板心 ±2 m、单程 3 s、0.67 m/s）后重测同一机位：60 FPS / 16.67 ms / P99 16.80 ms / draw 66–68 / tri 19 842–19 938，与上表完全一致 —— 每帧仍然只是 6 次 `setNextKinematicTranslation` + 6 次 `group.position.x` 赋值，`positionOf` 是纯算术（取模 + 两个线性段），不进物理求解器。
+
 ## 3. 已生效的画质降级（针对 GT 610）
 
 | 策略 | 取值 | 位置 |

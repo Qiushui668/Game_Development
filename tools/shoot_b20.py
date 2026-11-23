@@ -28,11 +28,13 @@ SHOT_WIDE = r"""
   P.releaseInput();
   if (P.getRace().state !== 'Racing') P.startNow();
   P.clearTiles();
+  P.resetBridge();
   const b = P.getBridge().platforms[1];
+  await sleep(120);
   P.teleport(b.x, 0.06, b.z);
-  await sleep(500);
+  await sleep(120);
   P.setCamera([-13.5, 9.0, -134.0], [0.2, 0.1, -160.5]);
-  await sleep(400);
+  await sleep(300);
   return P.getBridge().platforms.map((p) => p.x);
 })()
 """
@@ -41,8 +43,24 @@ SHOT_TOP = r"""
 (async () => {
   const P = window.__PPR;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  P.setCamera([0.0, 27.0, -157.0], [0.0, 0.0, -158.2]);
-  await sleep(400);
+  P.teleport(0, 0.05, 3.5);
+  P.resetBridge();
+  await sleep(120);
+  P.setCamera([0.0, 24.0, -151.0], [0.0, 0.2, -163.0]);
+  await sleep(300);
+  return P.getBridge().platforms.map((p) => p.x);
+})()
+"""
+
+SHOT_MID = r"""
+(async () => {
+  const P = window.__PPR;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  P.teleport(0, 0.05, 3.5);
+  P.resetBridge();
+  await sleep(1500);
+  P.setCamera([0.0, 24.0, -151.0], [0.0, 0.2, -163.0]);
+  await sleep(200);
   return P.getBridge().platforms.map((p) => p.x);
 })()
 """
@@ -51,8 +69,10 @@ SHOT_SIDE = r"""
 (async () => {
   const P = window.__PPR;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  P.resetBridge();
+  await sleep(120);
   P.setCamera([7.2, 2.6, -146.5], [0.0, 0.3, -159.0]);
-  await sleep(400);
+  await sleep(300);
   return P.getPlayer();
 })()
 """
@@ -62,10 +82,12 @@ SHOT_PLAY = r"""
   const P = window.__PPR;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   P.releaseInput();
+  P.resetBridge();
+  await sleep(120);
   const b = P.getBridge().platforms[2];
   P.teleport(b.x, 0.06, b.z);
   P.setOrbit(0, 11);
-  await sleep(900);
+  await sleep(700);
   return P.getPlayer();
 })()
 """
@@ -129,6 +151,7 @@ async def main() -> int:
 
             await grab(cdp, SHOT_WIDE, OUT / "b20_bridge_wide.png", 0.6)
             await grab(cdp, SHOT_TOP, OUT / "b20_bridge_top.png", 0.6)
+            await grab(cdp, SHOT_MID, OUT / "b20_bridge_mid.png", 0.6)
             await grab(cdp, SHOT_SIDE, OUT / "b20_bridge_side.png", 0.6)
             await grab(cdp, SHOT_PLAY, OUT / "b20_bridge_play.png", 0.6)
     finally:

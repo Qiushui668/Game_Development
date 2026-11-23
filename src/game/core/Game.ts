@@ -346,11 +346,12 @@ export class Game {
                   platforms: this.world.bridge.snapshot(),
                   size: { width: BRIDGE.width, depth: BRIDGE.depth, thickness: BRIDGE.thickness },
                   gap: { zStart: BRIDGE.gapZStart, zEnd: BRIDGE.gapZEnd },
-                  amplitudeX: BRIDGE.amplitudeX,
-                  periodSeconds: BRIDGE.periodSeconds,
-                  offX: BRIDGE.offsetX,
+                  swingX: BRIDGE.swingX,
+                  travelSeconds: BRIDGE.travelSeconds,
                 }
               : null,
+          /** 自动化验收用：把浮桥往返相位归零（回到"1 块最左 / 2 块最右"的起步姿态） */
+          resetBridge: () => this.world?.resetBridge(),
           /** 自动化验收用：自己的配色（身体 / 名牌 / 联机广播必须是同一个值） */
           getOwnColor: () => ({
             text: this.ownColorText,

@@ -51,13 +51,23 @@ async def main(url: str, out: str, width: int) -> int:
             await asyncio.sleep(1.0)
             metrics = await cdp.call("Page.getLayoutMetrics")
             css = metrics.get("cssContentSize") or metrics.get("contentSize")
-            h = int(css["height"]) + 8
+            # Chrome 的 cssContentSize 至少返回视口大小，页面比视口矮时会把空白一起截进来；
+            # 用 body 实际尺寸兜底，避免图下方出现大片空白。
+            real = await cdp.eval_js(
+                "(() => { const kids = [...document.body.children];"
+                " const bottom = kids.reduce((m, e) => Math.max(m, e.getBoundingClientRect().bottom), 0);"
+                " const right = kids.reduce((m, e) => Math.max(m, e.getBoundingClientRect().right), 0);"
+                " return { w: Math.ceil(right), h: Math.ceil(bottom) }; })()",
+                timeout_s=10,
+            )
+            w = int(real["w"]) if real and real.get("w") else int(css["width"])
+            h = int(real["h"]) + 5 if real and real.get("h") else int(css["height"]) + 8
             shot = await cdp.call(
                 "Page.captureScreenshot",
                 {
                     "format": "png",
                     "captureBeyondViewport": True,
-                    "clip": {"x": 0, "y": 0, "width": int(css["width"]), "height": h, "scale": 1},
+                    "clip": {"x": 0, "y": 0, "width": w, "height": h, "scale": 1},
                 },
             )
             Path(out).write_bytes(base64.b64decode(shot["data"]))

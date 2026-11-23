@@ -175,12 +175,14 @@ def bridge_rows():
     for b in BANDS:
         if not b["name"].startswith("浮桥"):
             continue
+        idx = int(b["name"].replace("浮桥", ""))
+        start = "起步最左（−2 m）" if idx % 2 == 1 else "起步最右（+2 m）"
         rows.append(
             '<tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#115e59;">%s</td>'
-            '<td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x %.1f…%.1f m（摆动极限）</td>'
+            '<td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x %.1f…%.1f m（扫过范围）</td>'
             '<td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z %.1f…%.1f m</td>'
-            '<td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">左右交替错开</td></tr>'
-            % (b["name"], b["xMin"], b["xMax"], b["zMin"], b["zMax"])
+            '<td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">%s</td></tr>'
+            % (b["name"], b["xMin"], b["xMax"], b["zMin"], b["zMax"], start)
         )
     return "".join(rows)
 
@@ -208,11 +210,12 @@ def build():
     <div style="flex:1 1 300px;min-width:280px;">{p2}</div>
   </div>
   {legend}
-  <div style="font-size:14px;font-weight:700;color:#7c2d55;margin:6px 0 6px;">浮桥段（答题墙 2 → 3 之间，z −142…−175）：6 块，<span style="color:#115e59;">左右交替 + 各自横移</span></div>
+  <div style="font-size:14px;font-weight:700;color:#7c2d55;margin:6px 0 6px;">浮桥段（答题墙 2 → 3 之间，z −142…−175）：6 块，<span style="color:#115e59;">奇偶镜像起步 + 匀速往返</span></div>
   <table style="border-collapse:collapse;font-size:13px;width:100%;max-width:760px;">{bridge}</table>
   <div style="font-size:13px;color:#8a5a72;line-height:1.7;margin-top:8px;">
     · 棋盘在这一段整片挖空（66 块方格没有碰撞体），踩空就掉进虚空 → 回起点满血复活；<br/>
-    · 6 块板前后间隔 5.5 m、左右中心交替 ±1.2 m，各自以 ±1.9 m 摆幅、5.2 s 一个来回横移，相邻两块横向只差约 2.4 m（一跳约 5.5 m，够得着）；<br/>
+    · 6 块板前后间隔 5.5 m，板心共用一条 ±2 m 的左右边界：以 0.67 m/s 匀速扫过去，3 s 撞到边界立刻反向（三角波），起步时第 1/3/5 块在最左、第 2/4/6 块在最右；<br/>
+    · 因为起点左右相反，相邻两块永远镜像反向走，横向落差在 0 … 4 m 之间变（1.5 s / 4.5 s 全部对齐），档距 5.5 m + 冲刺平跳约 7.9 m，一跳够得着；<br/>
     · 站上哪块就被哪块带着走（`BridgeField.carryDelta` → `PlayerController.carryX`），不会"站着不动就被板子甩下去"。
   </div>
   <div style="font-size:14px;font-weight:700;color:#7c2d55;margin:10px 0 6px;">4 只拳套与最近邻居的 z 间隙（<span style="color:#15803d;">全部 &gt; 0，无重叠</span>）</div>

@@ -29,7 +29,7 @@ JS = r"""
 
   out.layout = { conflicts: P.getLayout().conflicts, holeConflicts: P.getLayout().bridgeHoleConflicts };
   const bridge = P.getBridge();
-  out.bridge = { count: bridge.count, size: bridge.size, gap: bridge.gap, amp: bridge.amplitudeX, period: bridge.periodSeconds };
+  out.bridge = { count: bridge.count, size: bridge.size, gap: bridge.gap, swingX: bridge.swingX, travel: bridge.travelSeconds };
   out.plat0 = bridge.platforms[0];
   out.plat1 = bridge.platforms[1];
   out.own = P.getOwnColor();
