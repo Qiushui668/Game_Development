@@ -351,6 +351,7 @@ async def run(args: argparse.Namespace) -> int:
         before_kills = (await p1.js("window.__PPR.getStatus()"))["kills"]
         before_plays = (await p1.js("window.__PPR.getSfx()"))["killPlays"]
         hp_trace = []
+        remote_hp_trace = []
         for _ in range(3):
             # 每下之前把乙拉回攻击范围（轻击也会把对面推走一点）
             await p2.js("window.__PPR.teleport(1.0, 0.35, -28.8)")
@@ -358,12 +359,20 @@ async def run(args: argparse.Namespace) -> int:
             await p1.js("window.__PPR.attack('light')")
             await asyncio.sleep(0.6)
             hp_trace.append((await p2.js("window.__PPR.getStatus()"))["hp"])
+            # 房主这台机器从远端血条里读到的对手血量（协议里带 h 字段）
+            remotes = await p1.js("window.__PPR.getRemotes()")
+            remote_hp_trace.append(remotes[0]["hp"] if remotes else None)
         await asyncio.sleep(0.4)
         after_hits = (await p2.js("window.__PPR.getSelfHits()"))["knockdowns"]
         check(
             "轻击每下 -34（100 → 66 → 32）",
             hp_trace[:2] == [66, 32],
             f"hp={hp_trace}",
+        )
+        check(
+            "对手血量在另一台机器上也看得到（头顶血条同步）",
+            remote_hp_trace[:2] == hp_trace[:2],
+            f"本机={hp_trace} 远端读到={remote_hp_trace}",
         )
         check("轻击三下打到 0 血", hp_trace[-1] == 0 or after_hits == before_hits + 1, f"hp={hp_trace}")
 

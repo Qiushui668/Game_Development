@@ -14,7 +14,7 @@ const PORT = Number(process.env.PORT ?? 8000)
 const HOST = process.env.HOST ?? '0.0.0.0'
 const CAPACITY = 8
 const MIN_PLAYERS = 2
-const PROTOCOL_VERSION = 3
+const PROTOCOL_VERSION = 4
 const COUNTDOWN_MS = 3000
 const KNOCKDOWN_SECONDS = 1
 

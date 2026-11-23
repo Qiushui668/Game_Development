@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import { HEALTH, MATCH, PHYSICS, PLAYER, TRACK } from '@/game/core/GameConfig'
+import { HEALTH, MATCH, OBSTACLE, PHYSICS, PLAYER, TILE, TRACK } from '@/game/core/GameConfig'
 import { GameLoop } from '@/game/core/GameLoop'
 import { RaceStateMachine, type RaceState } from '@/game/core/GameState'
 import { SceneManager } from '@/game/scene/SceneManager'
@@ -23,6 +23,7 @@ import {
 } from '@/game/combat/AttackSystem'
 import { HealthState } from '@/game/combat/Health'
 import { NameTag } from '@/game/actor/NameTag'
+import { TILE_ZONES } from '@/game/physics/TileField'
 import { parseColor, recallColor, recallNickname } from '@/game/core/Profile'
 import { RemotePlayer } from '@/game/net/RemotePlayer'
 import type { ClientEvent, NetAttackKind, PlayerStatePayload } from '@/types/network'
@@ -223,10 +224,10 @@ export class Game {
     this.player = player
     this.jelly = jelly
 
-    // 头顶昵称：单人也显示（用户要求"进入游戏后昵称显示在人物头上"）
+    // 头顶昵称 + 血条：单人也显示（用户要求"昵称显示在人物头上"，血条挂在昵称上面）
     const ownName = this.net?.nickname ?? recallNickname() ?? ''
     const ownColor = this.net?.color ?? recallColor()
-    const tag = new NameTag(ownName, parseColor(ownColor, 0x2fe0d6))
+    const tag = new NameTag(ownName, parseColor(ownColor, 0x2fe0d6), HEALTH.max)
     tag.attachTo(jelly.group)
     this.ownTag = tag
 
@@ -340,16 +341,49 @@ export class Game {
           getMusic: () => this.music?.snapshot() ?? null,
           /** 自动化验收用：生命值 / 击杀快照 */
           getStatus: () => this.getStatus(),
-          /** 自动化验收用：头顶昵称名牌（文字 + 离地高度 + 是否可见） */
+          /** 自动化验收用：头顶昵称 + 血条（文字 / 血量数字 / 离地高度 / 是否可见） */
           getNameTag: () =>
             this.ownTag
               ? {
-                  text: this.ownTag.text,
-                  y: this.ownTag.sprite.position.y,
-                  visible: this.ownTag.sprite.visible,
+                  ...this.ownTag.snapshot(),
                   parent: this.ownTag.sprite.parent === this.jelly?.group,
                 }
               : null,
+          /** 自动化验收用：方格桥全量快照（角色 / 相位 / 坐标 / 碰撞）+ 随机批次号 */
+          getTiles: () =>
+            this.world
+              ? {
+                  assignmentId: this.world.tiles.assignmentId,
+                  zones: TILE_ZONES.map((z) => ({ ...z })),
+                  tiles: this.world.tiles.snapshot(),
+                }
+              : null,
+          /** 自动化验收用：本轮调过的关键参数（击退力度 / 回弹力度 / 随机概率） */
+          getTuning: () => ({
+            knockbackSpeed: OBSTACLE.knockbackSpeed,
+            sweepKnockbackSpeed: OBSTACLE.sweepKnockbackSpeed,
+            sweepKnockbackHop: OBSTACLE.sweepKnockbackHop,
+            sweepSpeedScale: OBSTACLE.sweepSpeedScale,
+            tileBounceSpeed: TILE.bounceSpeed,
+            tileBounceStun: TILE.bounceStun,
+            tileVanishChance: TILE.vanishChance,
+            tileBounceChance: TILE.bounceChance,
+          }),
+          /** 自动化验收用：按给定初速推自己一把（量击退距离，不扣血） */
+          pushPlayer: (dirX: number, dirZ: number, speed: number, hop = 0, stun?: number) =>
+            this.player?.applyKnockback({ dirX, dirZ, speed, hop, stun }) ?? false,
+          /** 自动化验收用：重新随机方格桥角色（不用等整局重开） */
+          rerollTiles: () => {
+            this.world?.resetTiles()
+            return this.world ? this.world.tiles.assignmentId : null
+          },
+          /** 自动化验收用：远端玩家头顶血条读到的血量（验证对方血量可见） */
+          getRemotes: () =>
+            [...this.remotes.entries()].map(([id, r]) => ({
+              id,
+              hp: r.health,
+              ...r.position,
+            })),
           /** 自动化验收用：读击杀音效的播放次数（验证 1杀.mp3 真的被调用） */
           getSfx: () => this.sfx?.snapshot() ?? null,
           /** 自动化验收用：直接扣血（cause 决定来源标签） */
@@ -527,6 +561,8 @@ export class Game {
       r: st.yaw,
       s,
       a: Math.min(1, st.speed / PLAYER.sprintSpeed),
+      // 血量随位置包一起发：别人据此在自己的头顶血条上看到我的血量
+      h: Math.round(this.health.hp),
     }
   }
 
@@ -572,7 +608,13 @@ export class Game {
     this.deathFlashT = 0
     this.killFlashT = 0
     this.interruptFlashT = 0
+    // "本局死亡次数"要重开归零（hp 由 health.reset 回满，deaths 单独清）
+    this.health.deaths = 0
+    this.ownTag?.setHealth(HEALTH.max, HEALTH.max)
+    for (const remote of this.remotes.values()) remote.setHealth(HEALTH.max, HEALTH.max)
     this.world?.resetQuizGates()
+    // 方格桥重新随机一遍角色，并全部长回来
+    this.world?.resetTiles()
     this.music?.duck(false)
     this.input?.setClickLock(true)
     this.player?.teleport(this.spawnX, this.spawnY, this.spawnZ)
@@ -643,6 +685,8 @@ export class Game {
     this.damageLog.push({ amount, cause, hpAfter: this.health.hp, dead })
     if (this.damageLog.length > 20) this.damageLog.shift()
     this.hurtFlashT = 0.45
+    // 头顶血条与 HUD 同步（血条只在数值变化时重画）
+    this.ownTag?.setHealth(this.health.hp, HEALTH.max)
     if (dead) this.onDeath(killerId)
     return dead
   }
@@ -658,14 +702,33 @@ export class Game {
     // 站起来的 0.45 s 里不接受输入，避免刚落地就被同一根柱子再扫一次
     this.player?.applyStun(0.45)
     this.health.reset()
+    this.ownTag?.setHealth(HEALTH.max, HEALTH.max)
     // 倒地计数不因死亡清零（是"本局被打倒几次"的统计），只在重开一局时复位
     this.attack.reset()
     this.debugAxes = null
   }
 
+  /**
+   * 掉进虚空（方格塌了）：掉到赛道下方由 PlayerController 兜住并已回起点。
+   * 这里只结算"死亡一次 + 回满血 + 广播"，不扣血、不算被谁杀。
+   */
+  private onVoidFall(): void {
+    this.health.voidFall()
+    this.ownTag?.setHealth(this.health.hp, HEALTH.max)
+    this.deathFlashT = 1.6
+    this.interruptQuiz()
+    this.attack.reset()
+    this.player?.applyStun(0.45)
+    this.followCam?.snap()
+    this.debugAxes = null
+    if (this.net) this.net.send({ type: 'died', killerId: null })
+  }
+
   /** 别人死亡（服务器广播）：清掉他的插值缓冲直接瞬移回起点；若是我杀的，记一次击杀 */
   applyPeerDeath(playerId: string, killerId: string | null): void {
-    this.remotes.get(playerId)?.snapToSpawn()
+    const remote = this.remotes.get(playerId)
+    remote?.snapToSpawn()
+    remote?.setHealth(HEALTH.max, HEALTH.max)
     const mine = this.net !== null && killerId === this.net.selfId
     if (mine) {
       this.kills++
@@ -907,6 +970,9 @@ export class Game {
     physics.step()
     player.sync(h)
 
+    // 方格塌了 / 漏下桥缝：PlayerController 已经把人送回起点，这里补一次死亡结算
+    if (player.consumeVoidFall() && this.race.state === 'Racing') this.onVoidFall()
+
     // 障碍判定放在物理结算之后：读到的是本步真实位置，不会穿过摆臂再判定
     const st = player.read()
 
@@ -927,6 +993,21 @@ export class Game {
           // 所有障碍（扫地杆 / 滚轴 / 地刺 / 摆锤）命中统一 −10 生命值
           this.applyDamage(HEALTH.obstacleDamage, 'obstacle', null)
         }
+      }
+    }
+
+    // 方格桥：踩到消失格开始抖（0.3 s 后塌）、踩到回弹格立刻往起点方向弹回十几米。
+    // 硬直期间不再判定，避免被弹飞的路上一路触发邻格。
+    if (this.race.state === 'Racing' && !st.stunned && this.world) {
+      const tile = this.world.probeTiles(st.x, st.y, st.z)
+      if (tile === 'bounce') {
+        player.applyKnockback({
+          dirX: 0,
+          dirZ: 1,
+          speed: TILE.bounceSpeed,
+          hop: TILE.bounceHop,
+          stun: TILE.bounceStun,
+        })
       }
     }
 

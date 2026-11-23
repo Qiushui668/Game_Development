@@ -247,7 +247,13 @@ export class ObstacleField {
       vx /= len
       vz /= len
 
-      return { dirX: vx, dirZ: vz, speed: OBSTACLE.knockbackSpeed, hop: OBSTACLE.knockbackHop, kind: 'sweeper' }
+      return {
+        dirX: vx,
+        dirZ: vz,
+        speed: OBSTACLE.sweepKnockbackSpeed,
+        hop: OBSTACLE.sweepKnockbackHop,
+        kind: 'sweeper',
+      }
     }
 
     // 滚轴：低于顶面就会被顶回去，够高可以直接跳过

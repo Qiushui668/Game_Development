@@ -4,8 +4,8 @@
  * 设计依据：开发实施说明书 V1.1 §12.1；B 阶段容量按用户需求定为 2–8 人。
  */
 
-/** 协议版本：加血量/死亡广播后升到 3，握手不匹配直接拒绝 */
-export const PROTOCOL_VERSION = 3
+/** 协议版本：加血量/死亡广播后升到 3；加头顶血条的 hp 字段后升到 4，握手不匹配直接拒绝 */
+export const PROTOCOL_VERSION = 4
 
 /** 房间容量：局域网 2–8 人（用户指定）；上线阶段沿用 8 */
 export const ROOM_CAPACITY = 8
@@ -37,6 +37,8 @@ export interface PlayerStatePayload {
   s: 'idle' | 'run' | 'jump' | 'fall' | 'knock' | 'respawn' | 'finish'
   /** 速度归一化，0–1（远端用来算跑步动画幅度） */
   a: number
+  /** 当前血量（0–100）：远端画在头顶血条上，看到对方的血量 */
+  h?: number
 }
 
 /** 出手类型 */

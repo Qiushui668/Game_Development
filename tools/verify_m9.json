@@ -1,0 +1,92 @@
+{
+  "url": "http://localhost:5173/",
+  "collectedAt": "2026-11-23 13:50:35",
+  "pass": true,
+  "results": [
+    {
+      "name": "头顶血条：昵称上方显示 100/100",
+      "ok": true,
+      "detail": "{\"text\": \"玩家208\", \"hp\": 100, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
+    },
+    {
+      "name": "受伤后头顶血条数字同步（轻击 -34 → 66）",
+      "ok": true,
+      "detail": "{\"text\": \"玩家208\", \"hp\": 66, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
+    },
+    {
+      "name": "重击 -70 时头顶血条显示 30",
+      "ok": true,
+      "detail": "{\"text\": \"玩家208\", \"hp\": 30, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
+    },
+    {
+      "name": "血量归零复活后头顶血条回满 100",
+      "ok": true,
+      "detail": "{\"text\": \"玩家208\", \"hp\": 100, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
+    },
+    {
+      "name": "柱子击退初速已调大（22 m/s，其它障碍仍是 10.5）",
+      "ok": true,
+      "detail": "{\"knockbackSpeed\": 10.5, \"sweepKnockbackSpeed\": 22, \"sweepKnockbackHop\": 4, \"sweepSpeedScale\": 1.6, \"tileBounceSpeed\": 31, \"tileBounceStun\": 1.5, \"tileVanishChance\": 0.42, \"tileBounceChance\": 0.16}"
+    },
+    {
+      "name": "按柱子初速被击退：实测退 7–8.5 m",
+      "ok": true,
+      "detail": "dist=8.06 m dz=8.06"
+    },
+    {
+      "name": "真被扫地杆扫中：掉 10 血且被甩出 ≥6 m",
+      "ok": true,
+      "detail": "moved=8.06 hp=90 log=[{'amount': 70, 'cause': 'heavy'}, {'amount': 10, 'cause': 'obstacle'}]"
+    },
+    {
+      "name": "赛道上有 3 段方格桥（共 54 格）",
+      "ok": true,
+      "detail": "{\"id\": 1, \"tiles\": 54, \"zones\": 3, \"vanish\": 20, \"bounce\": 9, \"solid\": 25, \"roles\": \"vsssbvvvssvsvsbbvvvbsssssvvbbsvvvbbssvsvssbsvvvsvsssss\"}"
+    },
+    {
+      "name": "方格随机抽成 消失 / 回弹 / 实心 三种角色",
+      "ok": true,
+      "detail": "vanish=20 bounce=9 solid=25"
+    },
+    {
+      "name": "重新抽取会换一批角色（每局随机）",
+      "ok": true,
+      "detail": "id 1 → 2  sameLayout=False"
+    },
+    {
+      "name": "踩到消失格：先抖动再塌（相位走过 tremble/drop/gone）",
+      "ok": true,
+      "detail": "phaseSeen=gone"
+    },
+    {
+      "name": "方格塌了人掉进虚空 → 回起点满血复活（deaths +1）",
+      "ok": true,
+      "detail": "{\"hp\": 100, \"deaths\": 2, \"z\": 3.5, \"x\": 0, \"solid\": false, \"phase\": \"gone\", \"logLen\": 4, \"damageLog\": [{\"amount\": 70, \"cause\": \"heavy\"}, {\"amount\": 70, \"cause\": \"heavy\"}, {\"amount\": 10, \"cause\": \"obstacle\"}]}"
+    },
+    {
+      "name": "掉进虚空不算被扣血（伤害流水里没有新增伤害）",
+      "ok": true,
+      "detail": "logBefore=4 logAfter=4"
+    },
+    {
+      "name": "回弹初速 31 m/s：实测往起点方向弹回 ≥10.5 m",
+      "ok": true,
+      "detail": "dist=12.31 m (目标约 12 m)"
+    },
+    {
+      "name": "踩到回弹格真的被弹回十几米（≥9 m、进入硬直、格子播了压缩动画）",
+      "ok": true,
+      "detail": "dz=11.26 stunned=True phase=idle trace=[{'t': 100, 'z': 2.7, 'y': 1.14, 'sp': 24.39, 'st': True}, {'t': 200, 'z': 4.83, 'y': 1.96, 'sp': 19.18, 'st': True}, {'t': 300, 'z': 6.5, 'y': 2.54, 'sp': 15.09, 'st': True}, {'t': 400, 'z': 7.81, 'y': 2.88, 'sp': 11.87, 'st': True}, {'t': 500, 'z': 8.85, 'y': 2.98, 'sp': 9.34, 'st': True}, {'t': 600, 'z': 9.66, 'y': 2.82, 'sp': 7.34, 'st': True}, {'t': 700, 'z': 10.3, 'y': 2.38, 'sp': 5.78, 'st': True}, {'t': 800, 'z': 10.88, 'y': 1.52, 'sp': 4.37, 'st': True}, {'t': 900, 'z': 11.26, 'y': 0.49, 'sp': 3.43, 'st': True}]"
+    },
+    {
+      "name": "回弹不扣血（只延缓前进）",
+      "ok": true,
+      "detail": "hp 100 → 100 logDelta=0"
+    },
+    {
+      "name": "HUD 与头顶血条一致，操作提示仍在",
+      "ok": true,
+      "detail": "{\"vitals\": \"HP100/100击杀 0\", \"controls\": \"左键轻击 -34 ·右键重击 -70\"}"
+    }
+  ]
+}

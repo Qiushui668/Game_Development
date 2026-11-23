@@ -32,6 +32,10 @@ export interface Knockback {
   dirZ: number
   speed: number
   hop: number
+  /** 硬直时长（默认 OBSTACLE.stunSeconds）：柱子/回弹格要更久才爬得回来 */
+  stun?: number
+  /** 重复命中冷却（默认 OBSTACLE.hitCooldown） */
+  cooldown?: number
 }
 
 function approach(current: number, target: number, maxDelta: number): number {
@@ -74,6 +78,8 @@ export class PlayerController {
   private stunT = 0
   /** 重复命中间隔 */
   private hitCooldownT = 0
+  /** 刚刚是不是掉进虚空（方格塌了 / 脚下没地面），给上层做死亡结算 */
+  private voidFell = false
 
   constructor(physics: RAPIER.World, spawn: { x: number; y: number; z: number }) {
     this.spawn = { ...spawn }
@@ -185,7 +191,18 @@ export class PlayerController {
       this.facing = this.facing + angleDelta(this.facing, target) * (1 - Math.exp(-12 * h))
     }
 
-    if (this.feetY < PLAYER.fallRespawnY) this.respawn()
+    if (this.feetY < PLAYER.fallRespawnY) {
+      // 掉到赛道下方（方格塌了 / 从桥缝里漏下去）：标记一次"坠入虚空"，再回起点
+      this.voidFell = true
+      this.respawn()
+    }
+  }
+
+  /** 取出并清除"坠入虚空"标记（上层据此结算死亡、广播与满血） */
+  consumeVoidFall(): boolean {
+    const fell = this.voidFell
+    this.voidFell = false
+    return fell
   }
 
   /** 供渲染层读取的不可变快照 */
@@ -224,8 +241,8 @@ export class PlayerController {
     this.grounded = false
     this.coyote = 0
     this.jumpBuffer = 0
-    this.stunT = OBSTACLE.stunSeconds
-    this.hitCooldownT = OBSTACLE.hitCooldown
+    this.stunT = kb.stun ?? OBSTACLE.stunSeconds
+    this.hitCooldownT = kb.cooldown ?? OBSTACLE.hitCooldown
     return true
   }
 

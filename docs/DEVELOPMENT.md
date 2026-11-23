@@ -56,19 +56,19 @@ Game_Development/
 │  ├─ game/
 │  │  ├─ core/   GameConfig / GameLoop / GameState / Game / Profile（昵称与配色的本地记忆）
 │  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World / QuizWalls（答题空气墙）
-│  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）/ NameTag（头顶昵称 Sprite）
-│  │  ├─ net/    RemotePlayer（远端果冻人 + 100 ms 插值缓冲 + 自己的名牌）
-│  │  ├─ physics/ ObstacleField（扫地杆/滚轴/地刺/摆锤布局 + 命中判定，纯 TS，服务端可复用）
+│  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）/ NameTag（头顶两行 Sprite：血条 + 血量数字 + 昵称）
+│  │  ├─ net/    RemotePlayer（远端果冻人 + 100 ms 插值缓冲 + 自己的名牌与血条）
+│  │  ├─ physics/ ObstacleField（扫地杆/滚轴/地刺/摆锤布局 + 命中判定，纯 TS，服务端可复用）/ TileField（方格桥：随机角色 + 塌陷/回弹状态机，纯 TS）
 │  │  ├─ quiz/   QuizSystem（墙位 / 抽题 / 冻结读秒，纯 TS，服务端可复用）
 │  │  ├─ combat/ AttackSystem（出招状态机 + 击倒规则 + 判定距离）/ Health（血量与伤害表，纯 TS）
 │  │  ├─ audio/  Music（单条 audio 循环 + 答题 duck）/ Sfx（击杀音效，元素池支持连杀叠加）
 │  │  ├─ data/   questions.ts（由 `tools/build_questions.py` 从 Excel 生成，勿手改）
 │  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃/F/左右键攻击的边沿触发）
 │  │  └─ utils/  MathUtils
-│  └─ types/     network.ts（协议 v3）
+│  └─ types/     network.ts（协议 v4：位置 / 血量 `h` / 攻击 / 死亡 / 榜单）
 ├─ public/audio/ danzai.mp3（背景音乐）/ kill.mp3（1杀音效）
 ├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
-├─ tools/        smoke_room.mjs（服务端协议 23 项）/ verify_m7.py（双客户端 31 项）/ verify_m8.py（本轮 14 项）/ perf_probe.py / verify_m2…m6.py / build_questions.py
+├─ tools/        smoke_room.mjs（服务端协议 23 项）/ verify_m7.py（双客户端 31 项）/ verify_m8.py（B1.5 14 项）/ verify_m9.py（B1.6 17 项）/ perf_probe.py / verify_m2…m6.py / build_questions.py
 └─ .venv/
 ```
 
@@ -129,6 +129,9 @@ Game_Development/
 | 地刺把人顶在原地连吃 | 击退速度只有 10.5×0.55，跳不出 3 m 长的刺阵 | 地刺击退给足（10.5 m/s + 3.2 上抛），一次接触就把人顶出刺阵 |
 | 轻击 3 下打死人后"倒地计数"归零，M6 断言变红 | `onDeath` 里把 `selfHits` 也 reset 了 | 倒地计数是"本局被打倒几次"的统计，死亡不清，只在重开一局时复位 |
 | 远端死亡后滑 300 m 回起点 | 100 ms 插值缓冲把"瞬移"当成位移 | `player_died` 到达时清空该远端的采样缓冲（`snapToSpawn`），下一包直接落到起点 |
+| 方格桥的回弹弹不到十几米（实测只有 4–8 m） | 桥后面 1.3–3 m 就是栏架/答题墙的**实体碰撞**，人被弹到 4 m 处撞墙停住（地刺/滚轴/扫地杆只有判定没有碰撞，不挡人） | 桥位改成"身后 12 m 内没有实体障碍"的空档：`-47.7..-56.3`（身后是 -34 栏架，留 13 m）、`-239.7..-248.9`（身后 -226 栏架，留 13 m）、`-263..-272`（身后 -250 栏架，留 13 m） |
+| 验收脚本量回弹只有 8–9 m，纯推却能量到 12 m | 脚本 `teleport` 到格子后先 `sleep(120)` 再记"起点"，可这 120 ms 里人已经被弹出 3.4 m 了 | 起点必须取**格子本身的坐标**（`dz = 当前 z − 格子 z`），别取"弹飞后的当前坐标" |
+| 方格桥把赛道地面切成 4 段后，地面 UV 出现接缝 | 原 UV 按单段平面算（0–1 → 贴图 2×2 格） | `floorPlane` 的 UV 改成**世界坐标**（`u = x/3`、`v = z/3`），切几段都对齐 |
 
 ## 6. Git
 

@@ -50,8 +50,12 @@ export const TRACK = {
 export const OBSTACLE = {
   /** 扫地杆摆臂半径（判定与几何共用） */
   armRadius: 0.5,
-  /** 被击中后的水平击退速度 */
+  /** 被击中后的水平击退速度（滚轴 / 地刺 / 摆锤） */
   knockbackSpeed: 10.5,
+  /** 扫地杆击退初速：横向 22 m/s + 0.9 s 硬直按指数衰减 ≈ 退 8 m（用户要求 7–8 m） */
+  sweepKnockbackSpeed: 22,
+  /** 扫地杆的上抛更高，飞出去看得见弧线 */
+  sweepKnockbackHop: 4,
   /** 被击中时的上抛速度，给一个短促的离地感 */
   knockbackHop: 3.2,
   /** 硬直时长：这段时间输入无效，只能等速度衰减 */
@@ -70,6 +74,35 @@ export const HEALTH = {
   obstacleDamage: OBSTACLE.damage,
   lightDamage: 34,
   heavyDamage: 70,
+} as const
+
+/** 棋盘方格桥（随机消失 → 掉进虚空；随机回弹 → 往起点方向弹开） */
+export const TILE = {
+  /** 每块方格的厚度：顶面与赛道顶面齐平（y = 0） */
+  thickness: 0.26,
+  /** 消失前的警示抖动：跑动能冲过去，站住就会掉 */
+  trembleSeconds: 0.3,
+  /** 抖动结束后的下坠动画时长 */
+  dropSeconds: 0.55,
+  /** 掉下去多深后整块隐藏 */
+  dropDepth: 6,
+  /** 消失后多久从下方长回来（随机区间，秒） */
+  regrowMin: 6,
+  regrowMax: 10,
+  /** 长回来的升起时长 */
+  riseSeconds: 0.45,
+  /** 每块方格被抽成"会消失 / 会回弹"的概率，其余是实心 */
+  vanishChance: 0.42,
+  bounceChance: 0.16,
+  /** 回弹：往起点方向（+Z）的初速与上抛。31 m/s + 1.5 s 硬直 ≈ 弹回 12 m；
+   *  上抛 12 m/s（最高约 3 m）让这段弧线能越过栏架 / 滚轴，不会被身后的障碍吃掉距离 */
+  bounceSpeed: 31,
+  bounceHop: 12,
+  bounceStun: 1.5,
+  /** 同一块回弹格的重复触发冷却 */
+  bounceCooldown: 1.2,
+  /** 回弹的压缩动画时长 */
+  bumpSeconds: 0.3,
 } as const
 
 
@@ -176,6 +209,11 @@ export const COLORS = {
   /** 大摆锤：紫色锤头 + 亮黄锤柄横杆 */
   pendulum: 0x8a4dff,
   pendulumArm: 0xffd84d,
+
+  /** 方格桥：回弹格用暖黄，站在桥上远远就能认出来 */
+  tileBounce: 0xffd84d,
+  /** 方格桥的侧面色（与棋盘两色区分，看出"这是拼上去的方格"） */
+  tileEdge: 0x7a4cc4,
 } as const
 
 /** 起点人群的果冻小人配色 */

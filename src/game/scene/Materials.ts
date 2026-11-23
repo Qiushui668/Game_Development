@@ -17,6 +17,8 @@ export interface MaterialSet {
   spikeBase: THREE.MeshLambertMaterial
   pendulum: THREE.MeshLambertMaterial
   pendulumArm: THREE.MeshLambertMaterial
+  /** 方格桥（InstancedMesh 用实例色，这里只提供白底材质） */
+  tile: THREE.MeshLambertMaterial
   crown: THREE.MeshLambertMaterial
   mountainLight: THREE.MeshLambertMaterial
   mountainDeep: THREE.MeshLambertMaterial
@@ -102,6 +104,7 @@ export function getMaterials(): MaterialSet {
     spikeBase: new THREE.MeshLambertMaterial({ color: COLORS.spikeBase }),
     pendulum: new THREE.MeshLambertMaterial({ color: COLORS.pendulum }),
     pendulumArm: new THREE.MeshLambertMaterial({ color: COLORS.pendulumArm }),
+    tile: new THREE.MeshLambertMaterial({ color: 0xffffff }),
     crown: new THREE.MeshLambertMaterial({ color: COLORS.crown }),
     mountainLight: new THREE.MeshLambertMaterial({ color: COLORS.mountainLight }),
     mountainDeep: new THREE.MeshLambertMaterial({ color: COLORS.mountainDeep }),

@@ -60,6 +60,7 @@ export class RemotePlayer {
     colorHex: number,
     spawn: [number, number, number],
     nickname = '',
+    maxHp = 100,
   ) {
     this.jelly = new JellyBean({ color: colorHex })
     this.x = spawn[0]
@@ -67,10 +68,15 @@ export class RemotePlayer {
     this.z = spawn[2]
     this.jelly.group.position.set(this.x, this.y, this.z)
     this.jelly.group.rotation.y = this.yaw
-    // 名字挂在角色 group 上，Sprite 自动面向相机
-    const tag = new NameTag(nickname || '玩家', colorHex)
+    // 名字 + 血条挂在角色 group 上，Sprite 自动面向相机
+    const tag = new NameTag(nickname || '玩家', colorHex, maxHp)
     tag.attachTo(this.jelly.group)
     this.tag = tag
+  }
+
+  /** 对方血量（来自他的 player_state 包 h 字段），直接画到头顶血条 */
+  setHealth(hp: number, maxHp = 100): void {
+    this.tag?.setHealth(hp, maxHp)
   }
 
   /** 对方死亡回起点：清空插值缓冲，下一包直接瞬移过去，不滑 300 m */
@@ -81,6 +87,13 @@ export class RemotePlayer {
   push(payload: PlayerStatePayload, nowMs: number): void {
     this.samples.push({ at: nowMs, p: payload.p, r: payload.r, s: payload.s, a: payload.a })
     while (this.samples.length > MAX_SAMPLES) this.samples.shift()
+    // 血量随位置包一起过来（协议 v4 的 h 字段），变化时才重画
+    if (typeof payload.h === 'number') this.setHealth(payload.h)
+  }
+
+  /** 供验收读取头顶血条显示的血量 */
+  get health(): number {
+    return this.tag?.hp ?? 0
   }
 
   playAttack(kind: AttackKind, side: number): void {

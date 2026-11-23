@@ -42,6 +42,16 @@ export class HealthState {
     return false
   }
 
+  /**
+   * 掉进虚空（方格塌了 / 漏下赛道）：不算被扣血，但记一次死亡并回满。
+   * 回起点由上层做（与血量归零走同一条复活路径）。
+   */
+  voidFall(): void {
+    this.deaths++
+    this.hp = HEALTH.max
+    this.lastCause = null
+  }
+
   /** 复活/重开：回满 */
   reset(): void {
     this.hp = HEALTH.max

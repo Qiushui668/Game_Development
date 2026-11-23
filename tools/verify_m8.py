@@ -323,8 +323,11 @@ async def main() -> int:
                 json.dumps(init, ensure_ascii=False),
             )
             check(
-                "人物头顶名牌挂在角色上（离地 2.3 m）",
-                init["tag"]["parent"] is True and abs(init["tag"]["y"] - 2.3) < 0.01,
+                "人物头顶名牌挂在角色上（血条在上、昵称行离地约 2.3 m）",
+                init["tag"]["parent"] is True
+                and abs(init["tag"]["y"] - 2.45) < 0.01
+                and init["tag"]["hp"] == 100
+                and init["tag"]["maxHp"] == 100,
                 json.dumps(init["tag"], ensure_ascii=False),
             )
 

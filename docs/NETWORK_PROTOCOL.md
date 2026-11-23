@@ -24,7 +24,7 @@
 
 消息编码：JSON，必须有 `type`。位置包字段刻意压短（`p` / `r` / `s` / `a`）以在 20 Hz 下省带宽。
 
-协议版本 `PROTOCOL_VERSION = 3`（v1 只有单机骨架；v2 加了 `hello`、攻击同步与 `back_to_lobby`；v3 加了血量/死亡广播与击杀计数）。握手时服务器下发 `hello`，版本不匹配由客户端拒绝进入游戏。
+协议版本 `PROTOCOL_VERSION = 4`（v1 只有单机骨架；v2 加了 `hello`、攻击同步与 `back_to_lobby`；v3 加了血量/死亡广播与击杀计数；v4 在 `PlayerStatePayload` 里补了 `h`（血量），远端头顶血条据此同步）。握手时服务器下发 `hello`，版本不匹配由客户端拒绝进入游戏。
 
 ## 3. 客户端 → 服务器
 
@@ -50,7 +50,8 @@
   p: [x, y, z];           // 位置
   r: number;              // yaw 弧度（角色朝向，跟着移动方向走）
   s: 'idle'|'run'|'jump'|'fall'|'knock'|'respawn'|'finish';
-  a: number }             // 速度归一化 0–1，远端据此算跑步动画幅度
+  a: number;              // 速度归一化 0–1，远端据此算跑步动画幅度
+  h?: number }            // 血量 0–100（v4 新增，缺省时远端按满血处理）
 ```
 
 ## 4. 服务器 → 客户端
@@ -100,6 +101,18 @@
 - 倒地状态通过 `player_state.s = 'knock'` 传出去，远端照样播"四脚朝天"的失控姿态。
 - **死亡**：挨打端血量归零 → 本地回起点满血复活，并向服务器发 `died`（带 `killerId`）。服务器只做一件事：给击杀者 `kills += 1`，然后广播 `player_died` + 刷新 `leaderboard`。受害者的下一次 `player_state` 会直接把位置带到起点，远端 `RemotePlayer` 收到 `player_died` 后清空插值缓冲（`snapToSpawn`），不会出现 300 m 的滑行。
 - 击杀者本地也维护一份 `kills`，收到 `player_died` 且 `killerId === selfId` 时 +1 并播 `public/audio/kill.mp3`；服务器榜单是权威口径，结算面板用它。
+- **掉进虚空**（方格塌了 / 从桥缝漏下去）和被人打死走同一条链路：本地结算（`deaths+1`、满血、回起点）+ 发 `died { killerId: null }`；服务器只做击杀归属，不区分死因。
+
+### 7.1 头顶血量条
+
+- 自机的血条由 `Game.applyDamage / onDeath / onVoidFall` 直接刷（`NameTag.setHealth`）。
+- 别人的血条读 `player_state.payload.h`：`RemotePlayer.push()` 见到 `typeof h === 'number'` 就更新，收到 `player_died` 时把对方血条重置回满血（他确实回起点满血复活了）。
+- 渲染成本：只是同一张 Canvas 多画一行（血条 + 数字），没有新增 Sprite / draw call。
+
+### 7.2 方格桥是"本地随机"
+
+- 方格桥每块的"消失 / 回弹 / 实心"身份是**各客户端本地 `Math.random()` 抽的**，协议不下发种子也不下发塌陷事件：两台机器上同一格的身份可能不同。
+- 这样做的好处是零带宽、掉线也不影响；代价是联机时不能靠"看到对手踩塌某格"来预判路线。若以后要统一，最低成本方案是房主开局抽一次种子广播，其余人用同一种子本地重算（`TileField` 已经是纯函数式的确定性布局入口）。
 
 
 ## 8. 断线与重连
