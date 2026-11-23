@@ -112,8 +112,12 @@ function restartRace(): void {
   game?.restart()
 }
 
-/** 结算面板「返回房间」：整房回大厅（不关房间、不算退出） */
+/** 结算面板「返回房间」：多人局整房回大厅；单机没有房间，就回首页重新选模式 */
 function backToRoom(): void {
+  if (!props.online) {
+    emit('exit')
+    return
+  }
   backToLobby()
 }
 

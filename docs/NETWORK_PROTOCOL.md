@@ -95,6 +95,8 @@ lobby ──start_game(≥2 人)──▶ countdown ──3 s──▶ racing �
 
 `PlayerBrief`：`id / nickname / color('#rrggbb') / host / finished / slot(0..7) / lateJoin? / rematch? / inLobby`。`slot` 决定起跑线站位，客户端按 `(slot - (n-1)/2) * 2.4 m` 落位；`lateJoin` 标记"进来时这局已经在跑"；`inLobby` 标记"结算期已经点过返回房间、人不在结算页上"。
 
+> `color` 口径（B2.0）：`create_room` / `join_room` 里的 `color` 由客户端**先规范成小写 `#rrggbb`**再发；服务端 `cleanColor` 只接受这 8 个色板值（`CROWD_HEX`，与前端 `CROWD_COLORS` 前 8 个一致），**收到非法值或缺失就从前 8 色里随机一个**并写进成员数据。这样"懒得选配色"的人也有确定颜色，且本人（`getOwnColor()`）与别人（`player_joined` / `room_state` 里读到的 `color`）拿到的是**同一个值**——不会出现"自己看青色、别人看你粉色"。
+
 ### 4.1 `GET /rooms`（HTTP，同一端口）
 
 多人页下方的"已有房间"列表靠它，返回：

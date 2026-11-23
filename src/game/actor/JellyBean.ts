@@ -246,6 +246,11 @@ export class JellyBean {
     this.bodyMat.color.setHex(hex)
   }
 
+  /** 当前身体颜色（验收用：确认"自己看到的颜色 = 自己选的颜色"） */
+  bodyColor(): number {
+    return this.bodyMat.color.getHex()
+  }
+
   /**
    * 程序化动画：跑步摆臂摆腿、腾空收腿抬臂、落地压缩。
    * 由渲染帧调用，dt 用真实帧间隔。

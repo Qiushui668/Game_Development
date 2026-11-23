@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import { GLOVE, HEALTH, MATCH, OBSTACLE, PHYSICS, PLAYER, TILE, TRACK } from '@/game/core/GameConfig'
+import { BRIDGE, COLORS, GLOVE, HEALTH, MATCH, OBSTACLE, PHYSICS, PLAYER, TILE, TRACK } from '@/game/core/GameConfig'
 import { GameLoop } from '@/game/core/GameLoop'
 import { RaceStateMachine, type RaceState } from '@/game/core/GameState'
 import { SceneManager } from '@/game/scene/SceneManager'
@@ -23,9 +23,9 @@ import {
 } from '@/game/combat/AttackSystem'
 import { HealthState } from '@/game/combat/Health'
 import { NameTag } from '@/game/actor/NameTag'
-import { GLOVES, gloveFist, layoutBands, layoutConflicts } from '@/game/physics/ObstacleField'
+import { GLOVES, gloveFist, layoutBands, layoutConflicts, bridgeVoidBand, bridgeVoidConflicts } from '@/game/physics/ObstacleField'
 import { TILE_GRID } from '@/game/physics/TileField'
-import { parseColor, recallColor, recallNickname } from '@/game/core/Profile'
+import { normalizeColor, parseColor, recallOrPickColor, recallNickname } from '@/game/core/Profile'
 import { RemotePlayer } from '@/game/net/RemotePlayer'
 import type { ClientEvent, NetAttackKind, PlayerStatePayload } from '@/types/network'
 
@@ -136,6 +136,8 @@ export class Game {
   private player: PlayerController | null = null
   private jelly: JellyBean | null = null
   private followCam: FollowCamera | null = null
+  /** 调试用：自由机位期间暂停跟随相机（只给截图/性能探针） */
+  private debugFreeCam = false
   private music: Music | null = null
   private sfx: Sfx | null = null
   private audioGesture: (() => void) | null = null
@@ -146,6 +148,9 @@ export class Game {
   private kills = 0
   /** 头顶名牌（自己的；远端的归 RemotePlayer 自己管） */
   private ownTag: NameTag | null = null
+  /** 自己的配色：自己看到的身体颜色 / 名牌颜色 / 联机广播出去的都是同一份 */
+  private ownColorHex: number = COLORS.jellyBody
+  private ownColorText = ''
   private hurtFlashT = 0
   private deathFlashT = 0
   private killFlashT = 0
@@ -221,16 +226,22 @@ export class Game {
     this.spawnZ = spawn.z
     const player = new PlayerController(physics, spawn)
     const jelly = new JellyBean()
-    if (this.net) jelly.setColor(0x2fe0d6)
+
+    // 头顶昵称 + 血条：单人也显示（用户要求"昵称显示在人物头上"，血条挂在昵称上面）
+    // 配色必须和"别人看到的自己"完全一致：多人局以服务器回传的 color 为准（服务器就是广播这一份），
+    // 单人局用本地记住的配色；两边都没有（没选过配色）就随机一个并当场记下来。
+    const ownName = this.net?.nickname ?? recallNickname() ?? ''
+    const ownColor = normalizeColor(this.net?.color) || recallOrPickColor()
+    const ownHex = parseColor(ownColor, COLORS.jellyBody)
+    jelly.setColor(ownHex)
+    this.ownColorHex = ownHex
+    this.ownColorText = ownColor
     jelly.group.position.set(spawn.x, spawn.y, spawn.z)
     manager.scene.add(jelly.group)
     this.player = player
     this.jelly = jelly
 
-    // 头顶昵称 + 血条：单人也显示（用户要求"昵称显示在人物头上"，血条挂在昵称上面）
-    const ownName = this.net?.nickname ?? recallNickname() ?? ''
-    const ownColor = this.net?.color ?? recallColor()
-    const tag = new NameTag(ownName, parseColor(ownColor, 0x2fe0d6), HEALTH.max)
+    const tag = new NameTag(ownName, ownHex, HEALTH.max)
     tag.attachTo(jelly.group)
     this.ownTag = tag
 
@@ -270,6 +281,7 @@ export class Game {
           setCamera: (pos: [number, number, number], target: [number, number, number]) => {
             const cam = this.manager?.camera
             if (!cam) return
+            this.debugFreeCam = true
             cam.position.set(pos[0], pos[1], pos[2])
             cam.lookAt(target[0], target[1], target[2])
           },
@@ -283,12 +295,14 @@ export class Game {
           },
           teleport: (x: number, y: number, z: number) => {
             this.player?.teleport(x, y, z)
+            this.debugFreeCam = false
             this.followCam?.snap()
           },
           /** 调试：环绕视角（degree），用于正面验收角色 */
           setOrbit: (yawDeg: number, pitchDeg = 9) => {
             const cam = this.followCam
             if (!cam) return
+            this.debugFreeCam = false
             cam.yaw = (yawDeg * Math.PI) / 180
             cam.pitch = (pitchDeg * Math.PI) / 180
             cam.snap()
@@ -317,8 +331,34 @@ export class Game {
                 }
               : null,
           getTrack: () => ({ length: TRACK.length, finishZ: TRACK.finishZ, spawnZ: MATCH.spawnZ }),
-          /** 自动化验收用：障碍俯视图矩形 + 重叠冲突（布局检查） */
-          getLayout: () => ({ bands: layoutBands(), conflicts: layoutConflicts() }),
+          /** 自动化验收用：障碍俯视图矩形 + 重叠冲突（布局检查）+ 浮桥挖空段 */
+          getLayout: () => ({
+            bands: layoutBands(),
+            conflicts: layoutConflicts(),
+            bridgeHole: bridgeVoidBand(),
+            bridgeHoleConflicts: bridgeVoidConflicts(),
+          }),
+          /** 自动化验收用：浮桥 6 块的当前位置 / 摆动范围 */
+          getBridge: () =>
+            this.world
+              ? {
+                  count: this.world.bridge.platforms.length,
+                  platforms: this.world.bridge.snapshot(),
+                  size: { width: BRIDGE.width, depth: BRIDGE.depth, thickness: BRIDGE.thickness },
+                  gap: { zStart: BRIDGE.gapZStart, zEnd: BRIDGE.gapZEnd },
+                  amplitudeX: BRIDGE.amplitudeX,
+                  periodSeconds: BRIDGE.periodSeconds,
+                  offX: BRIDGE.offsetX,
+                }
+              : null,
+          /** 自动化验收用：自己的配色（身体 / 名牌 / 联机广播必须是同一个值） */
+          getOwnColor: () => ({
+            text: this.ownColorText,
+            hex: this.ownColorHex,
+            body: this.jelly ? this.jelly.bodyColor() : null,
+            nameTag: this.ownTag ? this.ownTag.snapshot().color ?? null : null,
+            netColor: this.net?.color ?? null,
+          }),
           getRace: () => this.getRace(),
           getQuiz: () => this.getQuiz(),
           /** 自动化验收用：瞬移到第 i 面墙前 3 m（0 起） */
@@ -409,6 +449,9 @@ export class Game {
               hp: r.health,
               ...r.position,
             })),
+          /** 自动化验收用：远端果冻人的身体颜色（验证"别人看到的我的颜色"） */
+          getRemoteColors: () =>
+            [...this.remotes.entries()].map(([id, r]) => ({ id, body: r.jelly.bodyColor() })),
           /** 自动化验收用：读击杀音效的播放次数（验证 1杀.mp3 真的被调用） */
           getSfx: () => this.sfx?.snapshot() ?? null,
           /** 自动化验收用：直接扣血（cause 决定来源标签） */
@@ -653,8 +696,10 @@ export class Game {
     this.ownTag?.setHealth(HEALTH.max, HEALTH.max)
     for (const remote of this.remotes.values()) remote.setHealth(HEALTH.max, HEALTH.max)
     this.world?.resetQuizGates()
-    // 方格桥重新随机一遍角色，并全部长回来
+    // 方格桥重新随机一遍角色，并全部长回来（浮桥段保持挖空）
     this.world?.resetTiles()
+    // 浮桥回到初始摆动相位
+    this.world?.resetBridge()
     this.music?.duck(false)
     this.input?.setClickLock(true)
     this.player?.teleport(this.spawnX, this.spawnY, this.spawnZ)
@@ -1072,6 +1117,12 @@ export class Game {
       this.input?.consumeAttack()
     }
 
+    // 浮桥横向摆动：站在板上的人要跟着板一起挪（角色控制器不会继承 kinematic 平台速度）。
+    // 用上一步的位置判定"脚是不是在这块板上"，再把这步的位移补给刚体，板和人永远同拍。
+    const before = player.read()
+    const carry = this.world ? this.world.bridge.carryDelta(before.x, before.z, before.y, before.grounded) : 0
+    if (carry) player.carryX(carry)
+
     player.prepare(h, { ...axes, jump, yaw: this.followCam?.yaw ?? 0 })
     physics.step()
     player.sync(h)
@@ -1167,7 +1218,7 @@ export class Game {
     if (this.player && this.jelly && this.followCam) {
       const state = this.player.read()
       this.jelly.update(dtReal, state)
-      this.followCam.update(dtReal, state.x, state.y, state.z)
+      if (!this.debugFreeCam) this.followCam.update(dtReal, state.x, state.y, state.z)
     }
 
     if (this.remotes.size > 0) {

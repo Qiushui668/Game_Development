@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { COLORS, GLOVE, TILE, TRACK } from '@/game/core/GameConfig'
+import { BRIDGE, COLORS, GLOVE, TILE, TRACK } from '@/game/core/GameConfig'
 import { getMaterials } from '@/game/scene/Materials'
 import {
   GLOVES,
@@ -15,6 +15,7 @@ import {
   SWEEPERS,
 } from '@/game/physics/ObstacleField'
 import { TileField, TILE_GRID } from '@/game/physics/TileField'
+import { BridgeField } from '@/game/physics/BridgeField'
 import { QuizWalls, QUIZ_WALL_COLLIDER_WIDTH, QUIZ_WALL_HEIGHT } from '@/game/scene/QuizWalls'
 import { QUIZ_GATES } from '@/game/quiz/QuizSystem'
 
@@ -64,6 +65,10 @@ export class GameWorld {
   private readonly quizColliders: Array<RAPIER.Collider | null> = []
   /** 赛道方格：状态机（随机消失 / 回弹）+ InstancedMesh + 每格一个 cuboid */
   readonly tiles = new TileField()
+  /** 浮桥：6 块横向摆动的板（位置只有这一份，物理与视觉都读它） */
+  readonly bridge = new BridgeField()
+  private readonly bridgeBodies: RAPIER.RigidBody[] = []
+  private readonly bridgeGroups: THREE.Group[] = []
   private tileMesh: THREE.InstancedMesh | null = null
   private readonly tileColliders: Array<RAPIER.Collider | null> = []
   private readonly tileDummy = new THREE.Object3D()
@@ -85,6 +90,7 @@ export class GameWorld {
       this.quizWalls.group,
     )
     this.buildTiles()
+    this.buildBridge()
     this.buildSpinners()
     this.buildColliders()
   }
@@ -131,6 +137,7 @@ export class GameWorld {
       this.gloveFists[i].scale.setScalar(pop)
       group.rotation.y = def.side === 1 ? Math.PI : 0
     }
+    this.updateBridge(dt)
     this.updateTiles(dt)
     this.quizWalls.update(dt)
   }
@@ -140,7 +147,7 @@ export class GameWorld {
     return this.tiles.probe(x, z, footY)
   }
 
-  /** 重开一局：整条赛道重新随机 + 全部长回来 */
+  /** 重开一局：整条赛道重新随机 + 全部长回来（浮桥挖空段保持空） */
   resetTiles(): void {
     for (let i = 0; i < this.tileColliders.length; i++) {
       const c = this.tileColliders[i]
@@ -149,16 +156,17 @@ export class GameWorld {
     }
     this.tiles.reset()
     for (let i = 0; i < this.tiles.tiles.length; i++) {
-      this.tileColliders[i] = this.createTileCollider(i)
+      this.tileColliders[i] = this.tiles.isGap(i) ? null : this.createTileCollider(i)
     }
     this.refreshTileMatrices()
   }
 
-  /** 调试/验收用：把所有方格变回实心（老回归脚本用它排除随机性） */
+  /** 调试/验收用：把所有方格变回实心（老回归脚本用它排除随机性；挖空段不受影响） */
   clearTileTraps(): number {
     const cleared = this.tiles.clearSpecial()
     const changes = this.tiles.update(0)
     for (const change of changes) {
+      if (this.tiles.isGap(change.index)) continue
       if (change.solid && !this.tileColliders[change.index]) {
         this.tileColliders[change.index] = this.createTileCollider(change.index)
       }
@@ -227,6 +235,8 @@ export class GameWorld {
     this.gloveFists.length = 0
     this.tileColliders.length = 0
     this.tileMesh = null
+    this.bridgeBodies.length = 0
+    this.bridgeGroups.length = 0
     this.quizWalls.dispose()
     this.group.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.InstancedMesh) o.geometry.dispose()
@@ -565,7 +575,79 @@ export class GameWorld {
     this.tileMesh = mesh
     this.refreshTileMatrices()
     for (let i = 0; i < count; i++) {
-      this.tileColliders[i] = this.createTileCollider(i)
+      this.tileColliders[i] = this.tiles.isGap(i) ? null : this.createTileCollider(i)
+    }
+  }
+
+  /**
+   * 浮桥（B2.0）：6 块 3.6 m 的方形浮板，顶面与赛道齐平（y=0），
+   * 每块一个 kinematic 刚体（玩家能真正站上去），画面是「棋盘顶面 + 糖果色板身」。
+   * 横向摆动的位置来自 BridgeField，物理与视觉永远同一份数据。
+   */
+  private buildBridge(): void {
+    const mats = getMaterials()
+    const geo = new THREE.BoxGeometry(BRIDGE.width, BRIDGE.thickness, BRIDGE.depth)
+    // 顶面棋盘：UV 按世界米算（每 3 m 一张贴图），与赛道方格完全同款
+    const topGeo = new THREE.PlaneGeometry(BRIDGE.width, BRIDGE.depth, 1, 1)
+    topGeo.rotateX(-Math.PI / 2)
+    const pos = topGeo.attributes.position as THREE.BufferAttribute
+    const uv = topGeo.attributes.uv as THREE.BufferAttribute
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / CHECKER_TILE, pos.getZ(i) / CHECKER_TILE)
+    uv.needsUpdate = true
+
+    for (let i = 0; i < BRIDGE.count; i++) {
+      const p = this.bridge.platforms[i]
+      const group = new THREE.Group()
+      group.name = `FloatingBridge${i + 1}`
+      group.position.set(p.x, 0, p.z)
+
+      const slab = new THREE.Mesh(geo, i % 2 === 0 ? mats.bridgeA : mats.bridgeB)
+      slab.position.y = -BRIDGE.thickness / 2
+      const top = new THREE.Mesh(topGeo, mats.tile)
+      top.position.y = 0.004
+      // 板下滑轨：一条比板窄的深色衬底，让"悬空"看得出来
+      const keel = new THREE.Mesh(geo, mats.railDark)
+      keel.scale.set(0.86, 0.5, 0.86)
+      keel.position.y = -BRIDGE.thickness - 0.02
+      group.add(slab, top, keel)
+      this.group.add(group)
+      this.bridgeGroups.push(group)
+
+      // 物理：kinematic 刚体，碰撞盒顶面正好 y = 0
+      const body = this.physics.createRigidBody(
+        RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(p.x, -BRIDGE.thickness / 2, p.z),
+      )
+      this.physics.createCollider(
+        RAPIER.ColliderDesc.cuboid(BRIDGE.width / 2, BRIDGE.thickness / 2, BRIDGE.depth / 2),
+        body,
+      )
+      this.bridgeBodies.push(body)
+    }
+  }
+
+  /** 推进浮桥：算出新位置 → 喂给 kinematic 刚体 → 同步画面（板身随速度轻微倾斜） */
+  private updateBridge(dt: number): void {
+    this.bridge.update(dt)
+    for (let i = 0; i < this.bridgeBodies.length; i++) {
+      const p = this.bridge.platforms[i]
+      this.bridgeBodies[i].setNextKinematicTranslation({ x: p.x, y: -BRIDGE.thickness / 2, z: p.z })
+      const group = this.bridgeGroups[i]
+      group.position.x = p.x
+      const vx = dt > 0 ? p.dx / dt : 0
+      group.rotation.z = THREE.MathUtils.clamp(-vx * 0.045, -0.1, 0.1)
+      group.rotation.x = 0
+    }
+  }
+
+  /** 重开一局：浮桥回到初始相位（板身摆正、物理位置同步） */
+  resetBridge(): void {
+    this.bridge.reset()
+    for (let i = 0; i < this.bridgeBodies.length; i++) {
+      const p = this.bridge.platforms[i]
+      this.bridgeBodies[i].setTranslation({ x: p.x, y: -BRIDGE.thickness / 2, z: p.z }, true)
+      const group = this.bridgeGroups[i]
+      group.position.set(p.x, 0, p.z)
+      group.rotation.z = 0
     }
   }
 

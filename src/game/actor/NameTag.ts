@@ -120,13 +120,21 @@ export class NameTag {
     target.add(this.sprite)
   }
 
-  snapshot(): { text: string; hp: number; maxHp: number; y: number; visible: boolean } {
+  snapshot(): {
+    text: string
+    hp: number
+    maxHp: number
+    y: number
+    visible: boolean
+    color: string
+  } {
     return {
       text: this.text,
       hp: this.hp,
       maxHp: this.maxHp,
       y: this.sprite.position.y,
       visible: this.sprite.visible,
+      color: this.accent,
     }
   }
 

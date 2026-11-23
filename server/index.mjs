@@ -42,9 +42,16 @@ function cleanNickname(raw) {
   return trimmed.length > 0 ? trimmed : null
 }
 
+/** 与前端 CROWD_COLORS 前 8 个一致：没选配色（或传了非法值）的玩家由服务器随机分一个 */
+const CROWD_HEX = ['#ff3f8b', '#22d0c8', '#7a5cff', '#35e07a', '#ff8a3d', '#3fb6ff', '#ffd23f', '#d24bff']
+
 function cleanColor(raw) {
-  if (typeof raw === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase()
-  return '#ff3f8b'
+  if (typeof raw === 'string') {
+    const m = /^#[0-9a-fA-F]{6}$/.exec(raw.trim())
+    if (m) return m[0].toLowerCase()
+  }
+  // 随机一次并写进这份成员数据：之后所有人（含本人）读到的都是这一个颜色
+  return CROWD_HEX[Math.floor(Math.random() * CROWD_HEX.length)]
 }
 
 /** @typedef {{ id: string, nickname: string, color: string, ws: import('ws').WebSocket, slot: number, joinedAt: number, finished: boolean, timeMs: number | null, checkpoint: number, falls: number, kills: number, rematch: boolean, lateJoin: boolean, inLobby: boolean }} Member */

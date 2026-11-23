@@ -120,8 +120,11 @@ const killFlash = computed(() => (props.status?.killFlash ?? 0) > 0)
           </li>
         </ol>
 
-        <!-- 单机：再跑一次就重开自己那一局 -->
-        <button v-if="!online" class="again" @click="emit('restart')">再跑一次</button>
+        <!-- 单机：返回房间（回首页重新选单人/多人）+ 再跑一次；两个都在，和多人结算一致 -->
+        <div v-if="!online" class="actions">
+          <button class="ghost" @click="emit('lobby')">返回房间</button>
+          <button class="again" @click="emit('restart')">再跑一次</button>
+        </div>
 
         <!-- 多人：结算页上的人都同意才自动开局；「返回房间」只把自己送回大厅，别人不受影响 -->
         <div v-else class="actions">

@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { COLORS } from '@/game/core/GameConfig'
+import { BRIDGE, COLORS } from '@/game/core/GameConfig'
 
 export interface MaterialSet {
   /** 棋盘地面（按赛道段落各一份，重复度不同） */
@@ -24,6 +24,9 @@ export interface MaterialSet {
   gloveMount: THREE.MeshLambertMaterial
   /** 方格桥（InstancedMesh 用实例色，这里只提供白底材质） */
   tile: THREE.MeshLambertMaterial
+  /** 浮桥板身：奇偶两块糖果色 */
+  bridgeA: THREE.MeshLambertMaterial
+  bridgeB: THREE.MeshLambertMaterial
   crown: THREE.MeshLambertMaterial
   mountainLight: THREE.MeshLambertMaterial
   mountainDeep: THREE.MeshLambertMaterial
@@ -115,6 +118,8 @@ export function getMaterials(): MaterialSet {
     gloveMount: new THREE.MeshLambertMaterial({ color: COLORS.gloveMount }),
     // 赛道方格用与主地面完全相同的棋盘贴图：尺寸、颜色都和普通路面一致，看不出哪块有陷阱
     tile: new THREE.MeshLambertMaterial({ map: checker, color: 0xffffff }),
+    bridgeA: new THREE.MeshLambertMaterial({ color: BRIDGE.tintA }),
+    bridgeB: new THREE.MeshLambertMaterial({ color: BRIDGE.tintB }),
     crown: new THREE.MeshLambertMaterial({ color: COLORS.crown }),
     mountainLight: new THREE.MeshLambertMaterial({ color: COLORS.mountainLight }),
     mountainDeep: new THREE.MeshLambertMaterial({ color: COLORS.mountainDeep }),

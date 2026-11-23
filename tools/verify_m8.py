@@ -181,14 +181,14 @@ SHOT_PENDULUM = r"""
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   P.releaseInput();
   if (P.getRace().state !== 'Racing') P.startNow();
-  P.teleport(0.0, 0.05, -152);
-  // 摆到正中偏右时取景，能同时看清门架、锤臂与锤头
+  P.teleport(0.0, 0.05, -101.6);
+  // 摆到正中偏右时取景，能同时看清门架、锤臂与锤头（B2.0 摆锤 1 已挪到 z -109.2）
   for (let i = 0; i < 30; i++) {
     await sleep(80);
     const a = P.getObstacles().pendulumAngles[0];
     if (Math.abs(a) > 0.25) break;
   }
-  P.setCamera([6.5, 3.4, -151], [0, 2.2, -160]);
+  P.setCamera([6.2, 3.2, -100.6], [0, 2.2, -109.4]);
   await sleep(200);
   return P.getObstacles().pendulumAngles;
 })()

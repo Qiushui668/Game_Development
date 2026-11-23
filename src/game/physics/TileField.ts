@@ -1,4 +1,4 @@
-import { TILE, TRACK } from '@/game/core/GameConfig'
+import { BRIDGE, TILE, TRACK } from '@/game/core/GameConfig'
 
 /**
  * 赛道方格（纯 TS：不 import three、不碰 DOM）。
@@ -88,12 +88,16 @@ function buildTiles(): TileDef[] {
   return tiles
 }
 
-function freshState(role: TileRole): TileState {
-  return { role, phase: 'idle', t: 0, wait: 0, cooldown: 0, solid: true }
+function freshState(role: TileRole, solid = true): TileState {
+  return { role, phase: 'idle', t: 0, wait: 0, cooldown: 0, solid }
 }
 
 export class TileField {
   readonly tiles: TileDef[] = buildTiles()
+  /** 浮桥段被挖空的格子（没有地面、没有碰撞、永远隐身；不参与随机抽签） */
+  readonly gap: boolean[] = this.tiles.map(
+    (def) => def.z > BRIDGE.gapZEnd && def.z < BRIDGE.gapZStart,
+  )
   private readonly states: TileState[]
   /** 每次重排角色都 +1，验收用它确认"每局随机重抽" */
   assignmentId = 0
@@ -103,8 +107,18 @@ export class TileField {
   readonly touched: number[] = []
 
   constructor() {
-    this.states = this.tiles.map(() => freshState('solid'))
+    this.states = this.tiles.map((_, i) => freshState('solid', !this.gap[i]))
     this.reset()
+  }
+
+  /** 这一格是不是浮桥挖空段（永远没有地面） */
+  isGap(index: number): boolean {
+    return this.gap[index] === true
+  }
+
+  /** 挖空段的格子下标（验收用） */
+  gapIndices(): number[] {
+    return this.gap.map((v, i) => (v ? i : -1)).filter((i) => i >= 0)
   }
 
   /**
@@ -112,18 +126,21 @@ export class TileField {
    * 每格独立随机抽签，整条赛道没有任何"预设的桥段"；
    * 只做两件保底：终点前最后几米永远实心（别让人在终点线上掉下去）、
    * 全局至少各有 6 块消失 / 3 块回弹（极端运气也不会整条路都是实心）。
+   * 浮桥挖空段不参与抽签：那一段本来就该是空的。
    */
   reset(rng: () => number = Math.random): void {
     this.assignmentId += 1
-    for (const st of this.states) {
+    for (let i = 0; i < this.states.length; i++) {
+      const st = this.states[i]
       st.role = 'solid'
       st.phase = 'idle'
       st.t = 0
       st.wait = 0
       st.cooldown = 0
-      st.solid = true
+      st.solid = !this.gap[i]
     }
     for (let i = 0; i < this.tiles.length; i++) {
+      if (this.gap[i]) continue
       const def = this.tiles[i]
       // 终点前 7 m（-313..-320）保持实心：不能在压线那一步掉进虚空
       if (def.z <= TILE.safeFinishZ) continue
@@ -145,7 +162,7 @@ export class TileField {
     }
     const fill = (role: TileRole, need: number): void => {
       for (let k = 0; k < need; k++) {
-        const pool = this.tiles.map((_, i) => i).filter((i) => this.states[i].role === 'solid')
+        const pool = this.tiles.map((_, i) => i).filter((i) => !this.gap[i] && this.states[i].role === 'solid')
         if (pool.length === 0) return
         this.states[pool[Math.floor(rng() * pool.length)]].role = role
       }
@@ -156,10 +173,10 @@ export class TileField {
     this.touched.length = 0
   }
 
-  /** 调试/验收用：把某一块直接改成指定身份（不改变外观） */
+  /** 调试/验收用：把某一块直接改成指定身份（不改变外观；挖空段不接受修改） */
   setRole(index: number, role: TileRole): boolean {
     const st = this.states[index]
-    if (!st) return false
+    if (!st || this.gap[index]) return false
     st.role = role
     st.phase = 'idle'
     st.t = 0
@@ -170,7 +187,7 @@ export class TileField {
     return true
   }
 
-  /** 调试/验收用：把所有格子都变回实心（老回归脚本用它排除随机性） */
+  /** 调试/验收用：把所有格子都变回实心（老回归脚本用它排除随机性；挖空段保持空） */
   clearSpecial(): number {
     let cleared = 0
     for (let i = 0; i < this.states.length; i++) {
@@ -185,7 +202,7 @@ export class TileField {
         st.wait = 0
       }
       st.cooldown = 0
-      if (!st.solid) {
+      if (!st.solid && !this.gap[i]) {
         st.solid = true
         this.pending.push({ index: i, solid: true })
       }
@@ -211,7 +228,7 @@ export class TileField {
   probe(x: number, z: number, footY: number): 'vanish' | 'bounce' | null {
     if (footY > 0.45 || footY < -0.8) return null
     const i = this.indexAt(x, z)
-    if (i < 0) return null
+    if (i < 0 || this.gap[i]) return null
     const st = this.states[i]
     if (!st.solid || st.phase !== 'idle' || st.cooldown > 0) return null
     if (st.role === 'vanish') {
@@ -234,6 +251,8 @@ export class TileField {
     this.touched.length = 0
     for (let i = 0; i < this.states.length; i++) {
       const st = this.states[i]
+      // 浮桥挖空段没有格子：状态机永远停在这里，也不产生碰撞变化
+      if (this.gap[i]) continue
       if (st.cooldown > 0) st.cooldown = Math.max(0, st.cooldown - dt)
       if (st.phase === 'idle') continue
       // 这一步动过的格子都要重写实例矩阵（包括"刚好回到 idle"的那一帧）
@@ -294,9 +313,10 @@ export class TileField {
     return this.states[index].phase
   }
 
-  /** 视觉参数：抖动 / 下坠 / 长回来 / 压缩 */
+  /** 视觉参数：抖动 / 下坠 / 长回来 / 压缩；挖空段永远隐身 */
   visual(index: number): TileVisual {
     const st = this.states[index]
+    if (this.gap[index]) return { dropY: -TILE.dropDepth, visible: false, shake: 0, squash: 0 }
     switch (st.phase) {
       case 'tremble': {
         const p = st.t / TILE.trembleSeconds
@@ -321,7 +341,7 @@ export class TileField {
     }
   }
 
-  /** 验收快照：每格的坐标 / 身份 / 相位 / 是否有碰撞 */
+  /** 验收快照：每格的坐标 / 身份 / 相位 / 是否有碰撞 / 是否浮桥挖空 */
   snapshot(): Array<{
     index: number
     x: number
@@ -331,6 +351,7 @@ export class TileField {
     role: TileRole
     phase: TilePhase
     solid: boolean
+    gap: boolean
   }> {
     return this.tiles.map((def, i) => ({
       index: i,
@@ -341,6 +362,7 @@ export class TileField {
       role: this.states[i].role,
       phase: this.states[i].phase,
       solid: this.states[i].solid,
+      gap: this.gap[i],
     }))
   }
 }

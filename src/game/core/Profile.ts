@@ -6,6 +6,8 @@
  * 过期后强制回到昵称门重新输入。
  */
 
+import { CROWD_COLORS } from '@/game/core/GameConfig'
+
 const NICKNAME_KEY = 'ppr:nickname'
 const NICKNAME_AT_KEY = 'ppr:nicknameAt'
 const COLOR_KEY = 'ppr:color'
@@ -83,6 +85,32 @@ export function recallColor(): string {
 
 /** '#ff3f8b' → 0xff3f8b；解析不了就用兜底色 */
 export function parseColor(hex: string, fallback: number): number {
-  const parsed = Number.parseInt(hex.replace('#', ''), 16)
+  const parsed = Number.parseInt((hex ?? '').replace('#', ''), 16)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+/** 规范成小写 '#rrggbb'；空串 / 非法值返回 ''（调用方自己决定兜底） */
+export function normalizeColor(hex: string | null | undefined): string {
+  if (typeof hex !== 'string') return ''
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim())
+  return m ? `#${m[1].toLowerCase()}` : ''
+}
+
+/** 从 8 色可选色板里随机一个：输入昵称时没选配色就用它 */
+export function randomCrowdColor(rng: () => number = Math.random): string {
+  const list = CROWD_COLORS.slice(0, 8)
+  const i = Math.min(list.length - 1, Math.floor(rng() * list.length))
+  return `#${list[i].toString(16).padStart(6, '0')}`
+}
+
+/**
+ * 当前该用的配色：本地记住的；一个都没有就**随机一个并写回记忆**。
+ * 这样"没选配色"的人也有确定的颜色，自己看到的和联机里别人看到的永远是同一个。
+ */
+export function recallOrPickColor(rng: () => number = Math.random): string {
+  const saved = normalizeColor(recallColor())
+  if (saved) return saved
+  const picked = randomCrowdColor(rng)
+  saveColor(picked)
+  return picked
 }

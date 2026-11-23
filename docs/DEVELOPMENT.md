@@ -64,7 +64,7 @@ Game_Development/
 │  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World / QuizWalls（答题空气墙）
 │  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）/ NameTag（头顶两行 Sprite：血条 + 血量数字 + 昵称）
 │  │  ├─ net/    RemotePlayer（远端果冻人 + 100 ms 插值缓冲 + 自己的名牌与血条）
-│  │  ├─ physics/ ObstacleField（扫地杆/滚轴/地刺/摆锤/**巨型拳套**布局 + 命中判定，纯 TS，服务端可复用）/ TileField（全赛道 684 块方格：逐格随机身份 + 塌陷/回弹状态机，纯 TS）
+│  │  ├─ physics/ ObstacleField（扫地杆/滚轴/地刺/摆锤/**巨型拳套**布局 + 命中判定，纯 TS，服务端可复用）/ TileField（全赛道 684 块方格：逐格随机身份 + 塌陷/回弹状态机 + 浮桥段固定挖空 `gap`，纯 TS）/ BridgeField（答题墙 2→3 之间 6 块横移浮桥的位置与"载人"位移，纯 TS，服务端可复用）
 │  │  ├─ quiz/   QuizSystem（墙位 / 抽题 / 冻结读秒，纯 TS，服务端可复用）
 │  │  ├─ combat/ AttackSystem（出招状态机 + 击倒规则 + 判定距离）/ Health（血量与伤害表，纯 TS）
 │  │  ├─ audio/  Music（单条 audio 循环 + 答题 duck）/ Sfx（击杀音效，元素池支持连杀叠加）
@@ -73,8 +73,8 @@ Game_Development/
 │  │  └─ utils/  MathUtils
 │  └─ types/     network.ts（协议 v6：位置 / 血量 `h` / 攻击 / 死亡 / 榜单 / 房间阶段 / 中途加入 / 全员结算 / 再来一局 / 个人回大厅 `inLobby` / 房间列表）
 ├─ public/audio/ danzai.mp3（背景音乐）/ kill.mp3（1杀音效）
-├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT / layout_b19.html（赛道障碍俯视图，由 tools/gen_layout_map.py 从真实布局生成）
-├─ tools/        smoke_room.mjs（服务端协议 23 项）/ verify_m7.py（双客户端 31 项）/ verify_m8.py（B1.5 14 项）/ verify_m9.py（B1.6 17 项）/ verify_b18.py（B1.8+B1.9 39 项）/ perf_probe.py / dump_layout_b19.py / gen_layout_map.py / verify_m2…m6.py / build_questions.py
+├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT / layout_b20.html（赛道障碍俯视图，由 tools/gen_layout_map_b20.py 从真实布局生成）
+├─ tools/        smoke_room.mjs（服务端协议 23 项）/ smoke_room_b18.mjs（服务端 26 项）/ verify_m7.py（双客户端 31 项）/ verify_m8.py（B1.5 14 项）/ verify_m9.py（B1.6 17 项）/ verify_b18.py（B1.8+B1.9 39 项）/ verify_b20.py（B2.0 27 项）/ perf_probe.py / dump_layout_b19.py / dump_layout_b20.py / gen_layout_map.py / verify_m2…m6.py / build_questions.py
 └─ .venv/
 ```
 
@@ -157,6 +157,11 @@ Game_Development/
 | 起跑道拳套和旋转柱子 / 栏架 / 大摆锤叠在一起 | 4 只拳套的 z 是按赛道长度均分的，没有和既有障碍对表；`reach` 7 m 时拳心最内到 x≈±2，中线只剩 0.2 m | 4 只重排到 `-11 / -139.9 / -183.5 / -243.6`（右→左→右→左，起跑那只贴右墙、避开 -22 扫地杆从 -15.8 起扫的区域），`reach` 降到 6.5（中线留 ≥0.55 m）；扫地杆 4 从 -166 挪到 -168.5（原与 -160 摆锤只差 0.3 m）；新增 `ObstacleField.layoutBands()/layoutConflicts()` 把扫地杆扫掠圆、滚轴、地刺、摆锤摆幅、栏架、拳套全探出矩形、答题墙都投影到 z 轴，验收里断言两两不重叠（eps 0.05 m），并把 4 只的滑幅按缝隙收窄（2.2 / 1.0 / 2.2 / 2.6），最近间隙提到 ≥0.8 m |
 | 拳套淘汰后"复活了还自己往前滑十几米" | 被打飞的同时身上还叠着别的推力（击退 / 回弹速度），`respawnFromElimination()` 只 teleport + `applyStun`，残余横速在复活后才生效 | 复活前先 `player.halt()` 把横速清零再 teleport（m9 里"推人 31 m/s + 拳套当场打飞"实测会从起点滑到 z≈14.4） |
 | m9 的"回弹初速"量点突然多飞 2.5 m（12.33 → 14.84，命中 hp 变 0） | 起跑道拳套挪到右墙 z≈-11 后，老量点 (1.5, -8) 正好落在它的出拳范围里，"纯速度衰减"被人打飞打断 | 量点固定走左半边 `x=-4.5`（拳套只探到 x≥1）；消失格同理钉在 `idxAt(-4.5, -11.5)` |
+| B2.0：自机颜色永远是青色，别人看自己却是自己选的色 | `Game` 初始化里 `if (this.net) jelly.setColor(0x2fe0d6)` 把自机身体颜色写死；单机时连自己的 `NameTag` 都不用存档色；远端 `RemotePlayer` 却老老实实用 `peer.color` | 自机颜色统一走 `ownColor = normalizeColor(net?.color) \|\| recallOrPickColor()`，身体、头顶名牌、网络上报三处同一个 hex；`Profile` 新增 `normalizeColor / randomCrowdColor / recallOrPickColor`（没存档就随机一个并 `saveColor`），服务端 `cleanColor` 也改成随机兜底 |
+| B2.0：存档字段被 TS 收窄成字面量类型报 TS2322 | `private ownColorHex = COLORS.jellyBody` 在 `as const` 下被推成 `3137750` 字面量 | 显式写 `private ownColorHex: number = COLORS.jellyBody` |
+| B2.0：浮桥上的角色站着不动就掉下去（kinematic 平台不带着走） | `KinematicCharacterController` 只解碰撞、不继承平台速度（与"移动平台带不走角色"同一个根因） | `BridgeField.carryDelta()` 每步算出"人是否站在板上 + 本步 dx"，`Game.onFixedUpdate` 在 `player.prepare` 前调 `player.carryX(dx)`（只平移、不动速度）；验收里 2.5 s 平台走 3.8 m，人的横向漂移 < 0.1 m |
+| B2.0：6 块浮桥只建了一次 geometry，dispose 时把整段桥一起删掉 | `buildBridge()` 里 6 块板共用同一份几何体，`dispose()` 里按块 `geo.dispose()` | 共享几何体只在 `World.dispose()` 里随世界一起释放，单块不做 dispose |
+| B2.0：挖空的格子还会被抽签 / 被 `clearTiles` 改成实心，人又能站上去 | `TileField` 的 reset / 保底 fill / `clearSpecial` / `probe` 都按索引遍历 | 新增 `readonly gap: boolean[]`（`def.z` 落在 `BRIDGE.gapZEnd..gapZStart` 之间），`isGap()` 的格子在 reset / fill / probe / update / setRole / visual 里全部跳过，`buildTiles()` 也不给它建碰撞体；`snapshot()` 多一个 `gap` 字段供验收断言 |
 
 ## 6. Git
 

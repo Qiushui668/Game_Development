@@ -277,6 +277,17 @@ export class PlayerController {
     this.jumpBuffer = 0
   }
 
+  /**
+   * 浮桥横向摆动：站着的人跟着板一起挪。
+   * 角色控制器不会继承 kinematic 平台的速度，这里只平移刚体（不动横速/竖直速度），
+   * 所以"站在板上"时人和板永远同拍，跳起来之后不再受它影响。
+   */
+  carryX(dx: number): void {
+    if (Math.abs(dx) < 1e-5) return
+    const t = this.rigid.translation()
+    this.rigid.setTranslation({ x: t.x + dx, y: t.y, z: t.z }, false)
+  }
+
   respawn(): void {
     this.teleport(this.spawn.x, this.spawn.y, this.spawn.z)
   }

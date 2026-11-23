@@ -1,4 +1,4 @@
-import { GLOVE, OBSTACLE, PLAYER, TRACK } from '@/game/core/GameConfig'
+import { BRIDGE, GLOVE, OBSTACLE, PLAYER, TRACK } from '@/game/core/GameConfig'
 import { QUIZ_GATES } from '@/game/quiz/QuizSystem'
 
 /**
@@ -76,14 +76,13 @@ export interface HurdleRowDef {
 export const HURDLE_HEIGHT = 2.2
 export const HURDLE_THICKNESS = 0.8
 
-/** 前 6 排位置与 M2 验收脚本一致，不要挪动 */
+/** 前 5 排位置与 M2 验收脚本一致，不要挪动；浮桥段（-142…-175）整段不排栏架 */
 export const HURDLE_ROWS: HurdleRowDef[] = [
   { z: -34, pieces: [[-6.5, 5], [3.5, 4]] },
   { z: -58, pieces: [[-4.5, 4], [5.5, 5]] },
   { z: -82, pieces: [[-7.5, 3], [0, 6], [7.5, 3]] },
   { z: -106, pieces: [[-5.5, 5], [4.5, 4]] },
   { z: -130, pieces: [[-5, 4], [3, 3], [7.5, 3]] },
-  { z: -154, pieces: [[-3.5, 5], [5.5, 4]] },
   { z: -178, pieces: [[-6, 4], [2.5, 5]] },
   { z: -202, pieces: [[-4, 5], [4.5, 3], [8, 2]] },
   { z: -226, pieces: [[-7, 4], [0, 4], [6.5, 4]] },
@@ -92,21 +91,21 @@ export const HURDLE_ROWS: HurdleRowDef[] = [
   { z: -298, pieces: [[-4.5, 5], [4, 4]] },
 ]
 
-/** 每 48 m 一根，全部错开左右与长度，避免节奏重复 */
+/** 每 48 m 一根，全部错开左右与长度，避免节奏重复（第 4 根挪到浮桥段之后 -292.5） */
 export const SWEEPERS: SweeperDef[] = [
   { x: -5.5, z: -22, length: 6.2, speed: 1.35 * OBSTACLE.sweepSpeedScale, phase: 0 },
   { x: 5.5, z: -92, length: 6.6, speed: -1.15 * OBSTACLE.sweepSpeedScale, phase: 1.1 },
   { x: -5.5, z: -118, length: 6.0, speed: 1.5 * OBSTACLE.sweepSpeedScale, phase: 2.2 },
-  { x: 5.0, z: -168.5, length: 5.4, speed: -1.55 * OBSTACLE.sweepSpeedScale, phase: 3.3 },
+  { x: 5.0, z: -292.5, length: 4.6, speed: -1.55 * OBSTACLE.sweepSpeedScale, phase: 3.3 },
   { x: -6.0, z: -214, length: 6.4, speed: 1.65 * OBSTACLE.sweepSpeedScale, phase: 1.7 },
   { x: 5.5, z: -262, length: 5.8, speed: -1.4 * OBSTACLE.sweepSpeedScale, phase: 2.9 },
   { x: -5.0, z: -310, length: 6.6, speed: 1.25 * OBSTACLE.sweepSpeedScale, phase: 4.1 },
 ]
 
-/** 滚轴：压低到顶面 1.32 m（< 跳高 1.8 m），可以跳过去；侧面还能从两端绕 */
+/** 滚轴：压低到顶面 1.32 m（< 跳高 1.8 m），可以跳过去；侧面还能从两端绕（第 2 根挪到 -205） */
 export const ROLLERS: RollerDef[] = [
   { x: 0, z: -46, length: 9, radius: 0.65, y: 0.67, speed: 2.2, phase: 0 },
-  { x: 0, z: -144, length: 9, radius: 0.65, y: 0.67, speed: 2.6, phase: 0.7 },
+  { x: 0, z: -205, length: 9, radius: 0.65, y: 0.67, speed: 2.6, phase: 0.7 },
   { x: 0, z: -238, length: 9, radius: 0.65, y: 0.67, speed: 2.4, phase: 1.4 },
 ]
 
@@ -121,9 +120,9 @@ export const SPIKE_STRIPS: SpikeDef[] = [
   { z: -286, width: 6.5, length: 3, cycle: 2.4, phase: 0.65, height: 1.0 },
 ]
 
-/** 大摆锤：两根，锤头最低点约 1.5 m，正中扫过时必然命中，两侧悬空可钻 */
+/** 大摆锤：两根，锤头最低点约 1.5 m，正中扫过时必然命中，两侧悬空可钻（第 1 根挪到 -109.2） */
 export const PENDULUMS: PendulumDef[] = [
-  { x: 0, z: -160, pivotY: 6.4, armLength: 4.9, swing: 0.82, speed: 1.55, phase: 0, headRadius: 0.9 },
+  { x: 0, z: -109.2, pivotY: 6.4, armLength: 4.9, swing: 0.82, speed: 1.55, phase: 0, headRadius: 0.9 },
   { x: 0, z: -232, pivotY: 7.0, armLength: 5.4, swing: 0.95, speed: 1.25, phase: 1.4, headRadius: 1.0 },
 ]
 
@@ -151,13 +150,13 @@ export interface GloveDef {
 /**
  * 4 只拳套的 Z 区间都落在其它障碍的空档里（body ±1.5 m 也不碰到邻居，两侧最近留 ≥0.9 m）：
  *  - 起跑段：-8.8..-13.2（下一根扫地杆 -15.8 才起步，且它在左半、拳套在右墙）
- *  - 前中段：-137.4..-142.4（答题墙 2 在 -136.4、滚轴在 -143.3，中间只留这一条缝，所以滑幅收窄）
+ *  - 前中段：-137.1..-141.1（答题墙 2 在 -136、浮桥挖空段从 -142 起，中间只留这一条缝，所以滑幅收窄）
  *  - 后半：  -179.8..-187.2（栏架 -178.4 与地刺 -188.5 之间）
  *  - 尾段：  -239.5..-247.7（滚轴 -237.3 与栏架 -249.6 之间，居中放）
  */
 export const GLOVES: GloveDef[] = [
   { side: 1, zCenter: -11, zRange: 2.2, slideSpeed: 1.15, slidePhase: 0.2, punchPhase: 0.1 },
-  { side: -1, zCenter: -139.9, zRange: 1.0, slideSpeed: 0.95, slidePhase: 0.6, punchPhase: 0.45 },
+  { side: -1, zCenter: -139.4, zRange: 0.8, slideSpeed: 0.95, slidePhase: 0.6, punchPhase: 0.45 },
   { side: 1, zCenter: -183.5, zRange: 2.2, slideSpeed: 1.25, slidePhase: 0.85, punchPhase: 0.7 },
   { side: -1, zCenter: -243.6, zRange: 2.6, slideSpeed: 1.05, slidePhase: 0.05, punchPhase: 0.9 },
 ]
@@ -448,9 +447,41 @@ export interface LayoutBand {
   zMax: number
 }
 
+/** 浮桥单块在俯视图上的最大占位（左右摆到两端时会扫过的整条带） */
+export function bridgePlatformBand(index: number): LayoutBand {
+  const cz = BRIDGE.firstZ - index * BRIDGE.pitch
+  const cx = index % 2 === 0 ? -BRIDGE.offsetX : BRIDGE.offsetX
+  const halfW = BRIDGE.width / 2 + BRIDGE.amplitudeX
+  return {
+    name: `浮桥${index + 1}`,
+    xMin: cx - halfW,
+    xMax: cx + halfW,
+    zMin: cz - BRIDGE.depth / 2,
+    zMax: cz + BRIDGE.depth / 2,
+  }
+}
+
+/** 浮桥段被挖空的那片地面：没有任何障碍可以悬在洞上 */
+export function bridgeVoidBand(): LayoutBand {
+  return {
+    name: '浮桥段(挖空)',
+    xMin: -TRACK.width / 2,
+    xMax: TRACK.width / 2,
+    zMin: BRIDGE.gapZEnd,
+    zMax: BRIDGE.gapZStart,
+  }
+}
+
+/** 两个矩形在 XZ 上是否相交（超过 eps） */
+export function bandsOverlap(a: LayoutBand, b: LayoutBand, eps = 0.05): boolean {
+  const dz = Math.min(a.zMax, b.zMax) - Math.max(a.zMin, b.zMin)
+  const dx = Math.min(a.xMax, b.xMax) - Math.max(a.xMin, b.xMin)
+  return dz > eps && dx > eps
+}
+
 /**
  * 把所有障碍摊到俯视图的矩形里：扫地杆按摆臂扫掠圆、滚轴按自身尺寸、
- * 地刺/栏架/答题墙按实体、拳套按"完全探出时"的整只范围。
+ * 地刺/栏架/答题墙按实体、拳套按"完全探出时"的整只范围、浮桥按"摆到两端"的最大范围。
  */
 export function layoutBands(): LayoutBand[] {
   const halfW = TRACK.width / 2
@@ -519,6 +550,7 @@ export function layoutBands(): LayoutBand[] {
   QUIZ_GATES.forEach((g, i) => {
     bands.push({ name: `答题墙${i + 1}`, xMin: -halfW, xMax: halfW, zMin: g.z - 0.4, zMax: g.z + 0.4 })
   })
+  for (let i = 0; i < BRIDGE.count; i++) bands.push(bridgePlatformBand(i))
   return bands
 }
 
@@ -532,10 +564,17 @@ export function layoutConflicts(eps = 0.05): Array<[string, string]> {
       const b = bands[j]
       // 同一排栏架的不同段本来就是并排摆的，跳过
       if (a.name === b.name) continue
-      const dz = Math.min(a.zMax, b.zMax) - Math.max(a.zMin, b.zMin)
-      const dx = Math.min(a.xMax, b.xMax) - Math.max(a.xMin, b.xMin)
-      if (dz > eps && dx > eps) out.push([a.name, b.name])
+      if (bandsOverlap(a, b, eps)) out.push([a.name, b.name])
     }
   }
   return out
+}
+
+/** 检查"有没有障碍悬在浮桥的挖空洞上"，返回压到洞里的障碍名 */
+export function bridgeVoidConflicts(eps = 0.05): string[] {
+  const hole = bridgeVoidBand()
+  return layoutBands()
+    .filter((b) => !b.name.startsWith('浮桥'))
+    .filter((b) => bandsOverlap(b, hole, eps))
+    .map((b) => b.name)
 }

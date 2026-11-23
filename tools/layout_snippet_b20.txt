@@ -1,0 +1,164 @@
+
+<div style="width:100%;box-sizing:border-box;padding:14px 16px;background:#fffdfd;color:#3f2b38;font-family:system-ui,-apple-system,'Segoe UI','Microsoft YaHei',sans-serif;">
+  <div style="font-size:19px;font-weight:800;color:#7c2d55;letter-spacing:.4px;">B2.0 赛道障碍俯视图</div>
+  <div style="font-size:13px;color:#8a5a72;margin:4px 0 10px;line-height:1.6;">
+    数据直接取自游戏里 <code>__PPR.getLayout()</code> 的 <b>57 条俯视矩形</b>（扫地杆含整条摆臂扫掠圆、拳套含整只探出范围、栏架按实际栏位、浮桥按左右摆动极限）+ 1 条挖空带；纵向 z 轴向下为前进方向，横向 x 轴即赛道左右（护栏在 ±8.8 m）。
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;">
+    <div style="flex:1 1 300px;min-width:280px;"><svg viewBox="0 0 240 631" width="100%" role="img" aria-label="前半段  z +8 → -136">
+<title>前半段  z +8 → -136</title>
+<text x="0" y="13" font-size="12" font-weight="700" fill="#7c2d55">前半段  z +8 → -136</text>
+<rect x="61.1" y="26.0" width="130.2" height="604.8" fill="#fff5fa" stroke="#f9c6dc" stroke-width="1"/>
+<line x1="61.1" y1="26.0" x2="61.1" y2="630.8" stroke="#e7a9c5" stroke-width="1.4" stroke-dasharray="4 4"/>
+<line x1="191.3" y1="26.0" x2="191.3" y2="630.8" stroke="#e7a9c5" stroke-width="1.4" stroke-dasharray="4 4"/>
+<line x1="126.2" y1="26.0" x2="126.2" y2="630.8" stroke="#f3d0e0" stroke-width="1" stroke-dasharray="2 6"/>
+<text x="35.1" y="22.0" font-size="9" fill="#c084a2">左墙 -8.8</text>
+<text x="193.3" y="22.0" font-size="9" fill="#c084a2" text-anchor="end">右墙 +8.8</text>
+<line x1="25" y1="59.6" x2="30" y2="59.6" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="63.1" font-size="9" fill="#9d6b84" text-anchor="end">0</text>
+<line x1="25" y1="143.6" x2="30" y2="143.6" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="147.1" font-size="9" fill="#9d6b84" text-anchor="end">-20</text>
+<line x1="25" y1="227.6" x2="30" y2="227.6" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="231.1" font-size="9" fill="#9d6b84" text-anchor="end">-40</text>
+<line x1="25" y1="311.6" x2="30" y2="311.6" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="315.1" font-size="9" fill="#9d6b84" text-anchor="end">-60</text>
+<line x1="25" y1="395.6" x2="30" y2="395.6" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="399.1" font-size="9" fill="#9d6b84" text-anchor="end">-80</text>
+<line x1="25" y1="479.6" x2="30" y2="479.6" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="483.1" font-size="9" fill="#9d6b84" text-anchor="end">-100</text>
+<line x1="25" y1="563.6" x2="30" y2="563.6" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="567.1" font-size="9" fill="#9d6b84" text-anchor="end">-120</text>
+<rect x="39.6" y="126.0" width="91.8" height="52.1" fill="#f59e0b" fill-opacity="0.42" stroke="#b45309" stroke-width="1" rx="1.5"><title>扫地杆1 · x -11.7…0.7 m · z -28.2…-15.8 m</title></rect>
+<text x="85.5" y="155.2" font-size="9" font-weight="600" fill="#b45309" text-anchor="middle">扫地杆1</text>
+<rect x="118.1" y="418.3" width="97.7" height="55.4" fill="#f59e0b" fill-opacity="0.42" stroke="#b45309" stroke-width="1" rx="1.5"><title>扫地杆2 · x -1.1…12.1 m · z -98.6…-85.4 m</title></rect>
+<text x="166.9" y="449.2" font-size="9" font-weight="600" fill="#b45309" text-anchor="middle">扫地杆2</text>
+<rect x="41.1" y="530.0" width="88.8" height="50.4" fill="#f59e0b" fill-opacity="0.42" stroke="#b45309" stroke-width="1" rx="1.5"><title>扫地杆3 · x -11.5…0.5 m · z -124.0…-112.0 m</title></rect>
+<text x="85.5" y="558.4" font-size="9" font-weight="600" fill="#b45309" text-anchor="middle">扫地杆3</text>
+<rect x="92.9" y="250.1" width="66.6" height="5.5" fill="#3b82f6" fill-opacity="0.42" stroke="#1d4ed8" stroke-width="1" rx="1.5"><title>滚轴1 · x -4.5…4.5 m · z -46.6…-45.4 m</title></rect>
+<rect x="100.3" y="221.3" width="51.8" height="12.6" fill="#ef4444" fill-opacity="0.42" stroke="#b91c1c" stroke-width="1" rx="1.5"><title>地刺1 · x -3.5…3.5 m · z -41.5…-38.5 m</title></rect>
+<text x="126.2" y="230.8" font-size="9" font-weight="600" fill="#b91c1c" text-anchor="middle">地刺1</text>
+<rect x="96.6" y="474.1" width="59.2" height="10.9" fill="#ef4444" fill-opacity="0.42" stroke="#b91c1c" stroke-width="1" rx="1.5"><title>地刺2 · x -4.0…4.0 m · z -101.3…-98.7 m</title></rect>
+<text x="126.2" y="482.8" font-size="9" font-weight="600" fill="#b91c1c" text-anchor="middle">地刺2</text>
+<rect x="93.0" y="514.5" width="66.3" height="7.6" fill="#8b5cf6" fill-opacity="0.42" stroke="#6d28d9" stroke-width="1" rx="1.5"><title>摆锤1 · x -4.5…4.5 m · z -110.1…-108.3 m</title></rect>
+<rect x="59.6" y="200.7" width="37.0" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架1 · x -9.0…-4.0 m · z -34.4…-33.6 m</title></rect>
+<rect x="137.3" y="200.7" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架1 · x 1.5…5.5 m · z -34.4…-33.6 m</title></rect>
+<rect x="78.1" y="301.5" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架2 · x -6.5…-2.5 m · z -58.4…-57.6 m</title></rect>
+<rect x="148.4" y="301.5" width="37.0" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架2 · x 3.0…8.0 m · z -58.4…-57.6 m</title></rect>
+<rect x="59.6" y="402.3" width="22.2" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架3 · x -9.0…-6.0 m · z -82.4…-81.6 m</title></rect>
+<rect x="104.0" y="402.3" width="44.4" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架3 · x -3.0…3.0 m · z -82.4…-81.6 m</title></rect>
+<rect x="170.6" y="402.3" width="22.2" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架3 · x 6.0…9.0 m · z -82.4…-81.6 m</title></rect>
+<rect x="67.0" y="503.1" width="37.0" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架4 · x -8.0…-3.0 m · z -106.4…-105.6 m</title></rect>
+<rect x="144.7" y="503.1" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架4 · x 2.5…6.5 m · z -106.4…-105.6 m</title></rect>
+<rect x="74.4" y="603.9" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架5 · x -7.0…-3.0 m · z -130.4…-129.6 m</title></rect>
+<rect x="137.3" y="603.9" width="22.2" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架5 · x 1.5…4.5 m · z -130.4…-129.6 m</title></rect>
+<rect x="170.6" y="603.9" width="22.2" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架5 · x 6.0…9.0 m · z -130.4…-129.6 m</title></rect>
+<rect x="133.6" y="90.3" width="59.2" height="31.1" fill="#db2777" fill-opacity="0.42" stroke="#9d174d" stroke-width="1" rx="1.5"><title>拳套1 · x 1.0…9.0 m · z -14.7…-7.3 m</title></rect>
+<text x="163.2" y="109.0" font-size="9" font-weight="600" fill="#9d174d" text-anchor="middle">拳套1</text>
+<rect x="59.6" y="385.5" width="133.2" height="3.4" fill="#64748b" fill-opacity="0.34" stroke="#334155" stroke-width="1" rx="1.5"><title>答题墙1 · x -9.0…9.0 m · z -78.4…-77.6 m</title></rect>
+<rect x="59.6" y="629.1" width="133.2" height="3.4" fill="#64748b" fill-opacity="0.34" stroke="#334155" stroke-width="1" rx="1.5"><title>答题墙2 · x -9.0…9.0 m · z -136.4…-135.6 m</title></rect>
+<line x1="30" y1="44.9" x2="222.4" y2="44.9" stroke="#111827" stroke-width="1.2"/>
+<text x="220.4" y="41.9" font-size="9" fill="#111827" text-anchor="end">起点 z=3.5</text>
+</svg></div>
+    <div style="flex:1 1 300px;min-width:280px;"><svg viewBox="0 0 240 824" width="100%" role="img" aria-label="后半段  z -136 → -326">
+<title>后半段  z -136 → -326</title>
+<text x="0" y="13" font-size="12" font-weight="700" fill="#7c2d55">后半段  z -136 → -326</text>
+<rect x="61.1" y="26.0" width="130.2" height="798.0" fill="#fff5fa" stroke="#f9c6dc" stroke-width="1"/>
+<line x1="61.1" y1="26.0" x2="61.1" y2="824.0" stroke="#e7a9c5" stroke-width="1.4" stroke-dasharray="4 4"/>
+<line x1="191.3" y1="26.0" x2="191.3" y2="824.0" stroke="#e7a9c5" stroke-width="1.4" stroke-dasharray="4 4"/>
+<line x1="126.2" y1="26.0" x2="126.2" y2="824.0" stroke="#f3d0e0" stroke-width="1" stroke-dasharray="2 6"/>
+<text x="35.1" y="22.0" font-size="9" fill="#c084a2">左墙 -8.8</text>
+<text x="193.3" y="22.0" font-size="9" fill="#c084a2" text-anchor="end">右墙 +8.8</text>
+<line x1="25" y1="42.8" x2="30" y2="42.8" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="46.3" font-size="9" fill="#9d6b84" text-anchor="end">-140</text>
+<line x1="25" y1="126.8" x2="30" y2="126.8" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="130.3" font-size="9" fill="#9d6b84" text-anchor="end">-160</text>
+<line x1="25" y1="210.8" x2="30" y2="210.8" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="214.3" font-size="9" fill="#9d6b84" text-anchor="end">-180</text>
+<line x1="25" y1="294.8" x2="30" y2="294.8" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="298.3" font-size="9" fill="#9d6b84" text-anchor="end">-200</text>
+<line x1="25" y1="378.8" x2="30" y2="378.8" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="382.3" font-size="9" fill="#9d6b84" text-anchor="end">-220</text>
+<line x1="25" y1="462.8" x2="30" y2="462.8" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="466.3" font-size="9" fill="#9d6b84" text-anchor="end">-240</text>
+<line x1="25" y1="546.8" x2="30" y2="546.8" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="550.3" font-size="9" fill="#9d6b84" text-anchor="end">-260</text>
+<line x1="25" y1="630.8" x2="30" y2="630.8" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="634.3" font-size="9" fill="#9d6b84" text-anchor="end">-280</text>
+<line x1="25" y1="714.8" x2="30" y2="714.8" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="718.3" font-size="9" fill="#9d6b84" text-anchor="end">-300</text>
+<line x1="25" y1="798.8" x2="30" y2="798.8" stroke="#d8a7bf" stroke-width="1"/>
+<text x="23" y="802.3" font-size="9" fill="#9d6b84" text-anchor="end">-320</text>
+<rect x="59.6" y="51.2" width="133.2" height="138.6" fill="#e8eef2" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="61.6" y="61.2" font-size="8.5" fill="#475569" font-weight="700">浮桥挖空段</text>
+<rect x="129.2" y="664.0" width="68.1" height="38.6" fill="#f59e0b" fill-opacity="0.42" stroke="#b45309" stroke-width="1" rx="1.5"><title>扫地杆4 · x 0.4…9.6 m · z -297.1…-287.9 m</title></rect>
+<text x="163.2" y="686.5" font-size="9" font-weight="600" fill="#b45309" text-anchor="middle">扫地杆4</text>
+<rect x="34.4" y="326.7" width="94.7" height="53.8" fill="#f59e0b" fill-opacity="0.42" stroke="#b45309" stroke-width="1" rx="1.5"><title>扫地杆5 · x -12.4…0.4 m · z -220.4…-207.6 m</title></rect>
+<text x="81.8" y="356.8" font-size="9" font-weight="600" fill="#b45309" text-anchor="middle">扫地杆5</text>
+<rect x="124.0" y="530.8" width="85.8" height="48.7" fill="#f59e0b" fill-opacity="0.42" stroke="#b45309" stroke-width="1" rx="1.5"><title>扫地杆6 · x -0.3…11.3 m · z -267.8…-256.2 m</title></rect>
+<text x="166.9" y="558.4" font-size="9" font-weight="600" fill="#b45309" text-anchor="middle">扫地杆6</text>
+<rect x="40.4" y="729.1" width="97.7" height="55.4" fill="#f59e0b" fill-opacity="0.42" stroke="#b45309" stroke-width="1" rx="1.5"><title>扫地杆7 · x -11.6…1.6 m · z -316.6…-303.4 m</title></rect>
+<text x="89.2" y="760.0" font-size="9" font-weight="600" fill="#b45309" text-anchor="middle">扫地杆7</text>
+<rect x="92.9" y="313.1" width="66.6" height="5.5" fill="#3b82f6" fill-opacity="0.42" stroke="#1d4ed8" stroke-width="1" rx="1.5"><title>滚轴2 · x -4.5…4.5 m · z -205.7…-204.3 m</title></rect>
+<rect x="92.9" y="451.7" width="66.6" height="5.5" fill="#3b82f6" fill-opacity="0.42" stroke="#1d4ed8" stroke-width="1" rx="1.5"><title>滚轴3 · x -4.5…4.5 m · z -238.7…-237.3 m</title></rect>
+<rect x="98.5" y="246.5" width="55.5" height="12.6" fill="#ef4444" fill-opacity="0.42" stroke="#b91c1c" stroke-width="1" rx="1.5"><title>地刺3 · x -3.8…3.8 m · z -191.5…-188.5 m</title></rect>
+<text x="126.2" y="256.0" font-size="9" font-weight="600" fill="#b91c1c" text-anchor="middle">地刺3</text>
+<rect x="102.2" y="649.7" width="48.1" height="12.6" fill="#ef4444" fill-opacity="0.42" stroke="#b91c1c" stroke-width="1" rx="1.5"><title>地刺4 · x -3.2…3.2 m · z -287.5…-284.5 m</title></rect>
+<text x="126.2" y="659.2" font-size="9" font-weight="600" fill="#b91c1c" text-anchor="middle">地刺4</text>
+<rect x="86.3" y="425.0" width="79.8" height="8.4" fill="#8b5cf6" fill-opacity="0.42" stroke="#6d28d9" stroke-width="1" rx="1.5"><title>摆锤2 · x -5.4…5.4 m · z -233.0…-231.0 m</title></rect>
+<rect x="67.0" y="200.7" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架6 · x -8.0…-4.0 m · z -178.4…-177.6 m</title></rect>
+<rect x="126.2" y="200.7" width="37.0" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架6 · x 0.0…5.0 m · z -178.4…-177.6 m</title></rect>
+<rect x="78.1" y="301.5" width="37.0" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架7 · x -6.5…-1.5 m · z -202.4…-201.6 m</title></rect>
+<rect x="148.4" y="301.5" width="22.2" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架7 · x 3.0…6.0 m · z -202.4…-201.6 m</title></rect>
+<rect x="178.0" y="301.5" width="14.8" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架7 · x 7.0…9.0 m · z -202.4…-201.6 m</title></rect>
+<rect x="59.6" y="402.3" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架8 · x -9.0…-5.0 m · z -226.4…-225.6 m</title></rect>
+<rect x="111.4" y="402.3" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架8 · x -2.0…2.0 m · z -226.4…-225.6 m</title></rect>
+<rect x="159.5" y="402.3" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架8 · x 4.5…8.5 m · z -226.4…-225.6 m</title></rect>
+<rect x="70.7" y="503.1" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架9 · x -7.5…-3.5 m · z -250.4…-249.6 m</title></rect>
+<rect x="129.9" y="503.1" width="37.0" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架9 · x 0.5…5.5 m · z -250.4…-249.6 m</title></rect>
+<rect x="67.0" y="603.9" width="22.2" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架10 · x -8.0…-5.0 m · z -274.4…-273.6 m</title></rect>
+<rect x="118.8" y="603.9" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架10 · x -1.0…3.0 m · z -274.4…-273.6 m</title></rect>
+<rect x="174.3" y="603.9" width="14.8" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架10 · x 6.5…8.5 m · z -274.4…-273.6 m</title></rect>
+<rect x="74.4" y="704.7" width="37.0" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架11 · x -7.0…-2.0 m · z -298.4…-297.6 m</title></rect>
+<rect x="141.0" y="704.7" width="29.6" height="3.4" fill="#22c55e" fill-opacity="0.42" stroke="#15803d" stroke-width="1" rx="1.5"><title>栏架11 · x 2.0…6.0 m · z -298.4…-297.6 m</title></rect>
+<rect x="59.6" y="30.6" width="59.2" height="19.3" fill="#db2777" fill-opacity="0.42" stroke="#9d174d" stroke-width="1" rx="1.5"><title>拳套2 · x -9.0…-1.0 m · z -141.7…-137.1 m</title></rect>
+<text x="89.2" y="43.5" font-size="9" font-weight="600" fill="#9d174d" text-anchor="middle">拳套2</text>
+<rect x="133.6" y="210.0" width="59.2" height="31.1" fill="#db2777" fill-opacity="0.42" stroke="#9d174d" stroke-width="1" rx="1.5"><title>拳套3 · x 1.0…9.0 m · z -187.2…-179.8 m</title></rect>
+<text x="163.2" y="228.7" font-size="9" font-weight="600" fill="#9d174d" text-anchor="middle">拳套3</text>
+<rect x="59.6" y="460.7" width="59.2" height="34.4" fill="#db2777" fill-opacity="0.42" stroke="#9d174d" stroke-width="1" rx="1.5"><title>拳套4 · x -9.0…-1.0 m · z -247.7…-239.5 m</title></rect>
+<text x="89.2" y="481.1" font-size="9" font-weight="600" fill="#9d174d" text-anchor="middle">拳套4</text>
+<rect x="59.6" y="24.3" width="133.2" height="3.4" fill="#64748b" fill-opacity="0.34" stroke="#334155" stroke-width="1" rx="1.5"><title>答题墙2 · x -9.0…9.0 m · z -136.4…-135.6 m</title></rect>
+<rect x="59.6" y="276.3" width="133.2" height="3.4" fill="#64748b" fill-opacity="0.34" stroke="#334155" stroke-width="1" rx="1.5"><title>答题墙3 · x -9.0…9.0 m · z -196.4…-195.6 m</title></rect>
+<rect x="59.6" y="629.1" width="133.2" height="3.4" fill="#64748b" fill-opacity="0.34" stroke="#334155" stroke-width="1" rx="1.5"><title>答题墙4 · x -9.0…9.0 m · z -280.4…-279.6 m</title></rect>
+<rect x="89.9" y="57.9" width="54.8" height="15.1" fill="#0d9488" fill-opacity="0.42" stroke="#115e59" stroke-width="1" rx="1.5"><title>浮桥1 · x -4.9…2.5 m · z -147.2…-143.6 m</title></rect>
+<text x="117.3" y="68.7" font-size="9" font-weight="600" fill="#115e59" text-anchor="middle">浮桥1</text>
+<rect x="107.7" y="81.0" width="54.8" height="15.1" fill="#0d9488" fill-opacity="0.42" stroke="#115e59" stroke-width="1" rx="1.5"><title>浮桥2 · x -2.5…4.9 m · z -152.7…-149.1 m</title></rect>
+<text x="135.1" y="91.8" font-size="9" font-weight="600" fill="#115e59" text-anchor="middle">浮桥2</text>
+<rect x="89.9" y="104.1" width="54.8" height="15.1" fill="#0d9488" fill-opacity="0.42" stroke="#115e59" stroke-width="1" rx="1.5"><title>浮桥3 · x -4.9…2.5 m · z -158.2…-154.6 m</title></rect>
+<text x="117.3" y="114.9" font-size="9" font-weight="600" fill="#115e59" text-anchor="middle">浮桥3</text>
+<rect x="107.7" y="127.2" width="54.8" height="15.1" fill="#0d9488" fill-opacity="0.42" stroke="#115e59" stroke-width="1" rx="1.5"><title>浮桥4 · x -2.5…4.9 m · z -163.7…-160.1 m</title></rect>
+<text x="135.1" y="138.0" font-size="9" font-weight="600" fill="#115e59" text-anchor="middle">浮桥4</text>
+<rect x="89.9" y="150.3" width="54.8" height="15.1" fill="#0d9488" fill-opacity="0.42" stroke="#115e59" stroke-width="1" rx="1.5"><title>浮桥5 · x -4.9…2.5 m · z -169.2…-165.6 m</title></rect>
+<text x="117.3" y="161.1" font-size="9" font-weight="600" fill="#115e59" text-anchor="middle">浮桥5</text>
+<rect x="107.7" y="173.4" width="54.8" height="15.1" fill="#0d9488" fill-opacity="0.42" stroke="#115e59" stroke-width="1" rx="1.5"><title>浮桥6 · x -2.5…4.9 m · z -174.7…-171.1 m</title></rect>
+<text x="135.1" y="184.2" font-size="9" font-weight="600" fill="#115e59" text-anchor="middle">浮桥6</text>
+<line x1="30" y1="798.8" x2="222.4" y2="798.8" stroke="#111827" stroke-width="1.2"/>
+<text x="220.4" y="808.8" font-size="9" fill="#111827" text-anchor="end">终点 z=-320</text>
+</svg></div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;margin:4px 0 12px;"><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#3f2b38;"><span style="width:14px;height:10px;border-radius:2px;background:#f59e0b;opacity:.55;border:1px solid #b45309;"></span>扫地杆</span><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#3f2b38;"><span style="width:14px;height:10px;border-radius:2px;background:#3b82f6;opacity:.55;border:1px solid #1d4ed8;"></span>滚轴</span><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#3f2b38;"><span style="width:14px;height:10px;border-radius:2px;background:#ef4444;opacity:.55;border:1px solid #b91c1c;"></span>地刺</span><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#3f2b38;"><span style="width:14px;height:10px;border-radius:2px;background:#8b5cf6;opacity:.55;border:1px solid #6d28d9;"></span>摆锤</span><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#3f2b38;"><span style="width:14px;height:10px;border-radius:2px;background:#22c55e;opacity:.55;border:1px solid #15803d;"></span>栏架</span><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#3f2b38;"><span style="width:14px;height:10px;border-radius:2px;background:#db2777;opacity:.55;border:1px solid #9d174d;"></span>拳套</span><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#3f2b38;"><span style="width:14px;height:10px;border-radius:2px;background:#0d9488;opacity:.55;border:1px solid #115e59;"></span>浮桥</span><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#3f2b38;"><span style="width:14px;height:10px;border-radius:2px;background:#64748b;opacity:.55;border:1px solid #334155;"></span>答题墙</span></div>
+  <div style="font-size:14px;font-weight:700;color:#7c2d55;margin:6px 0 6px;">浮桥段（答题墙 2 → 3 之间，z −142…−175）：6 块，<span style="color:#115e59;">左右交替 + 各自横移</span></div>
+  <table style="border-collapse:collapse;font-size:13px;width:100%;max-width:760px;"><tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#115e59;">浮桥1</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x -4.9…2.5 m（摆动极限）</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z -147.2…-143.6 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">左右交替错开</td></tr><tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#115e59;">浮桥2</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x -2.5…4.9 m（摆动极限）</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z -152.7…-149.1 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">左右交替错开</td></tr><tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#115e59;">浮桥3</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x -4.9…2.5 m（摆动极限）</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z -158.2…-154.6 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">左右交替错开</td></tr><tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#115e59;">浮桥4</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x -2.5…4.9 m（摆动极限）</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z -163.7…-160.1 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">左右交替错开</td></tr><tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#115e59;">浮桥5</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x -4.9…2.5 m（摆动极限）</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z -169.2…-165.6 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">左右交替错开</td></tr><tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#115e59;">浮桥6</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x -2.5…4.9 m（摆动极限）</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z -174.7…-171.1 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">左右交替错开</td></tr></table>
+  <div style="font-size:13px;color:#8a5a72;line-height:1.7;margin-top:8px;">
+    · 棋盘在这一段整片挖空（66 块方格没有碰撞体），踩空就掉进虚空 → 回起点满血复活；<br/>
+    · 6 块板前后间隔 5.5 m、左右中心交替 ±1.2 m，各自以 ±1.9 m 摆幅、5.2 s 一个来回横移，相邻两块横向只差约 2.4 m（一跳约 5.5 m，够得着）；<br/>
+    · 站上哪块就被哪块带着走（`BridgeField.carryDelta` → `PlayerController.carryX`），不会"站着不动就被板子甩下去"。
+  </div>
+  <div style="font-size:14px;font-weight:700;color:#7c2d55;margin:10px 0 6px;">4 只拳套与最近邻居的 z 间隙（<span style="color:#15803d;">全部 &gt; 0，无重叠</span>）</div>
+  <table style="border-collapse:collapse;font-size:13px;width:100%;max-width:640px;"><tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#9d174d;">拳套1</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">右墙</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x 1…9 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z -14.7…-7.3 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:600;">扫地杆1 · 1.1 m</td></tr><tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#9d174d;">拳套2</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">左墙</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x -9…-1 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z -141.7…-137.1 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:600;">答题墙2 · 0.7 m</td></tr><tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#9d174d;">拳套3</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">右墙</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x 1…9 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z -187.2…-179.8 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:600;">地刺3 · 1.3 m</td></tr><tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#9d174d;">拳套4</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">左墙</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x -9…-1 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">z -247.7…-239.5 m</td><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:600;">滚轴3 · 0.8 m</td></tr></table>
+  <div style="font-size:13px;color:#8a5a72;line-height:1.7;margin-top:10px;">
+    · 拳套按右 → 左 → 右 → 左交替，四段分别落在 z≈-11 / -139.4 / -183.5 / -243.6，彼此拉开约 128 / 44 / 60 m，不会挤在同一段赛道；<br/>
+    · 起跑道那只只占右墙（x 1…9 m），第一根扫地杆只扫左半（x -11.7…0.7 m），z 上还隔着 1.1 m，不再叠在出生点正前方；<br/>
+    · 扫地杆 1→7 的摆臂方向左右交替，滚轴/地刺/摆锤全在赛道中间，栏架按 1–3 个栏位错开，答题墙横跨整条赛道但留出 8 m 净距；<br/>
+    · 为了让浮桥段干净，滚轴 2 挪到 -205、摆锤 1 挪到 -109.2、扫地杆 4 挪到 -292.5，并删掉了 -154 那一排栏架（栏架只剩 11 排）。
+  </div>
+</div>

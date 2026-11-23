@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CROWD_COLORS } from '@/game/core/GameConfig'
-import { nicknameFresh, nicknameLeftMs } from '@/game/core/Profile'
+import {
+  normalizeColor,
+  nicknameFresh,
+  nicknameLeftMs,
+  randomCrowdColor,
+  saveColor,
+} from '@/game/core/Profile'
 import RoomLobby from '@/components/home/RoomLobby.vue'
 import {
   createRoom,
@@ -22,7 +28,8 @@ const panel = ref<Panel>('none')
 const draft = ref('')
 /** 已经确认过的昵称（1 小时有效），有值就表示可以跳过昵称门 */
 const nickname = ref('')
-const color = ref('#ff3f8b')
+/** 选中的配色；空串 = 还没选（确认昵称 / 开跑时会随机补一个，保证自己看和别人看一致） */
+const color = ref('')
 const code = ref('')
 const busy = ref(false)
 /** 昵称门：必须先确认昵称，才露出单人 / 多人入口 */
@@ -38,12 +45,19 @@ let roomTimer = 0
 onMounted(() => {
   draft.value = ''
   const saved = recallIdentity()
-  if (saved.color && swatches.includes(saved.color)) color.value = saved.color
+  const savedColor = normalizeColor(saved.color)
+  if (savedColor && swatches.includes(savedColor)) color.value = savedColor
   // 昵称 1 小时时效：还在有效期内就直接跳过昵称门，不用每次加载页面都重填
   if (nicknameFresh()) {
     nickname.value = saved.nickname
     named.value = true
     leftMinutes.value = Math.ceil(nicknameLeftMs() / 60000)
+    // 名字还在有效期但从来没用过配色（老存档）：直接随机一个并记住，
+    // 这样自己看到的颜色和进了房间别人看到的颜色是同一次抽取的结果
+    if (!color.value) {
+      color.value = randomCrowdColor()
+      saveColor(color.value)
+    }
   } else {
     nickname.value = ''
     named.value = false
@@ -56,11 +70,27 @@ onBeforeUnmount(() => {
 
 // 进过房就记住名字与颜色（昵称带时间戳，1 小时后要重新输入）
 watch([nickname, color], () => {
-  if (nickname.value.trim()) rememberIdentity(nickname.value.trim(), color.value)
+  if (!nickname.value.trim() || !color.value) return
+  rememberIdentity(nickname.value.trim(), color.value)
 })
 
 const inRoom = computed(() => room.status === 'lobby' || room.status === 'connecting')
 const canSubmit = computed(() => nickname.value.trim().length > 0 && !busy.value)
+
+/** 没选配色就随机一个（一次抽定、写进记忆，之后自己/别人看到都是这个色） */
+function ensureColor(): string {
+  if (!color.value) {
+    color.value = randomCrowdColor()
+    saveColor(color.value)
+  }
+  return color.value
+}
+
+/** 「随机」按钮：当场换一个随机配色 */
+function pickRandomColor(): void {
+  color.value = randomCrowdColor()
+  saveColor(color.value)
+}
 
 /** 确认昵称：写入本地记忆（带时间戳），然后才显示模式选择 */
 function confirmNickname(): void {
@@ -68,7 +98,8 @@ function confirmNickname(): void {
   if (!name) return
   draft.value = ''
   nickname.value = name
-  rememberIdentity(name, color.value)
+  // 没点色板就随机一个：这是"自己看到的 = 别人看到的"的同一份颜色
+  rememberIdentity(name, ensureColor())
   named.value = true
   leftMinutes.value = Math.ceil(nicknameLeftMs() / 60000)
 }
@@ -87,7 +118,7 @@ function pickColor(c: string): void {
 async function onCreate(): Promise<void> {
   if (!canSubmit.value) return
   busy.value = true
-  await createRoom(nickname.value.trim(), color.value)
+  await createRoom(nickname.value.trim(), ensureColor())
   busy.value = false
 }
 
@@ -98,7 +129,7 @@ async function onJoin(target?: string): Promise<void> {
     return
   }
   busy.value = true
-  await joinRoom(roomCode, nickname.value.trim(), color.value)
+  await joinRoom(roomCode, nickname.value.trim(), ensureColor())
   busy.value = false
 }
 
@@ -184,7 +215,11 @@ function phaseLabel(phase: string): string {
               :aria-label="c"
               @click="pickColor(c)"
             />
+            <button class="swatch random" type="button" title="随机换一个配色" @click="pickRandomColor">
+              随机
+            </button>
           </div>
+          <p class="gate-tip">{{ color ? '' : '不选配色也行：进游戏时会随机分一个，自己看到的和联机里别人看到的是同一个' }}</p>
         </form>
       </template>
 
@@ -934,6 +969,33 @@ input.code {
 .swatch.on {
   border-color: #10304a;
   transform: scale(1.12);
+}
+
+/* 「随机」按钮：和色板同尺寸，写两个字，一眼知道是抽一个色 */
+.swatch.random {
+  width: auto;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 2px solid rgba(16, 48, 74, 0.25);
+  color: #24485c;
+  font-size: 11.5px;
+  font-weight: 800;
+  font-family: inherit;
+  line-height: 22px;
+}
+
+.swatch.random:hover {
+  border-color: #10304a;
+}
+
+.gate-tip {
+  max-width: 420px;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #5b7d90;
+  text-align: center;
 }
 
 .primary {
