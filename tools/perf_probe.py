@@ -180,6 +180,9 @@ async def run(args: argparse.Namespace) -> int:
             if not ready:
                 raise SystemExit(f"页面未就绪：{error_detail or '超时未出现 window.__PPR'}")
 
+            # 赛道铺满随机方格陷阱：性能采样期间不希望赛道随机塌陷，先全部变回实心
+            await cdp.eval_js("window.__PPR.clearTiles && window.__PPR.clearTiles()")
+
             renderer = await cdp.eval_js(RENDERER_JS)
 
             if args.eval_js:

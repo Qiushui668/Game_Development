@@ -1,42 +1,35 @@
-import { PLAYER, TILE, TRACK } from '@/game/core/GameConfig'
+import { TILE, TRACK } from '@/game/core/GameConfig'
 
 /**
- * 棋盘方格桥（纯 TS：不 import three、不碰 DOM）。
- * 赛道上挑几段把实心地面换成一块块方格，随机抽成三种角色：
- *   - vanish：踩上去先抖 0.3 s 再掉下去，人跟着掉 → 掉进虚空回起点
- *   - bounce：踩上去立刻把人往 +Z（起点方向）弹回十几米
- *   - solid ：普通格子
- * 视觉（World 的 InstancedMesh）与碰撞（每格一个 cuboid）都读这一份状态。
+ * 赛道方格（纯 TS：不 import three、不碰 DOM）。
+ *
+ * 整条主赛道就是一张 3 m × 3 m 的方格网（6 列 × 114 行 = 684 块），每块的外观完全一致：
+ * 同一尺寸、同一张棋盘贴图、同一个高度 —— 玩家**看不出**哪块会塌、哪块会弹。
+ * 开局每块独立随机抽身份：
+ *   - vanish：踩上去先抖 0.3 s 再塌 → 人掉进虚空回起点
+ *   - bounce：踩上去立刻往 +Z（起点方向）弹回十几米
+ *   - solid ：普通赛道地面
+ * 视觉（World 的 InstancedMesh）与碰撞（每块一个 cuboid）都读这一份状态。
  */
 
-/** 方格桥区间：zStart 靠起点、zEnd 靠终点（负值，zStart > zEnd） */
-export interface TileZoneDef {
-  zStart: number
-  zEnd: number
-}
-
-/** 横向 6 列（赛道 18 m → 每格 3 m），纵向每段 3 行 */
-export const TILE_COLS = 6
-export const TILE_ROWS = 3
-
-/**
- * 三段方格桥都卡在「身后 12 m 没有任何实体障碍」的空档里：
- * 回弹是往 +Z（起点方向）弹，如果桥后紧贴栏架，人会被栏架挡在 3–4 m 处，
- * 弹不到"十几米"。下面三段的后退落点都在空格里（只有无碰撞的地刺/滚轴/摆锤）。
- */
-export const TILE_ZONES: TileZoneDef[] = [
-  { zStart: -47.7, zEnd: -56.3 },
-  { zStart: -239.7, zEnd: -248.9 },
-  { zStart: -263, zEnd: -272 },
-]
+/** 方格网覆盖的范围：与主赛道地面完全重合（zStart 靠起点、zEnd 靠终点） */
+export const TILE_GRID = {
+  /** 横向 6 列（赛道 18 m / 3 m） */
+  cols: Math.round(TRACK.width / TILE.cellSize),
+  /** 20 → -322 共 342 m / 3 m = 114 行 */
+  rows: Math.round((TILE.zStart - TILE.zEnd) / TILE.cellSize),
+  zStart: TILE.zStart,
+  zEnd: TILE.zEnd,
+  cell: TILE.cellSize,
+  /** 单块尺寸（宽 = 深 = 3 m） */
+  width: TRACK.width / Math.round(TRACK.width / TILE.cellSize),
+} as const
 
 export type TileRole = 'solid' | 'vanish' | 'bounce'
 export type TilePhase = 'idle' | 'tremble' | 'drop' | 'gone' | 'rise' | 'bump'
 
 export interface TileDef {
   id: number
-  /** 所属区间下标 */
-  zone: number
   col: number
   row: number
   x: number
@@ -77,24 +70,21 @@ interface TileState {
 
 function buildTiles(): TileDef[] {
   const tiles: TileDef[] = []
-  const width = TRACK.width / TILE_COLS
-  TILE_ZONES.forEach((zone, zi) => {
-    const depth = (zone.zStart - zone.zEnd) / TILE_ROWS
-    for (let row = 0; row < TILE_ROWS; row++) {
-      for (let col = 0; col < TILE_COLS; col++) {
-        tiles.push({
-          id: tiles.length,
-          zone: zi,
-          col,
-          row,
-          x: -TRACK.width / 2 + width * (col + 0.5),
-          z: zone.zStart - depth * (row + 0.5),
-          width,
-          depth,
-        })
-      }
+  const cell = TILE_GRID.cell
+  const halfW = TRACK.width / 2
+  for (let row = 0; row < TILE_GRID.rows; row++) {
+    for (let col = 0; col < TILE_GRID.cols; col++) {
+      tiles.push({
+        id: tiles.length,
+        col,
+        row,
+        x: -halfW + cell * (col + 0.5),
+        z: TILE_GRID.zStart - cell * (row + 0.5),
+        width: cell,
+        depth: cell,
+      })
     }
-  })
+  }
   return tiles
 }
 
@@ -109,6 +99,8 @@ export class TileField {
   assignmentId = 0
   /** update() 产生的碰撞变化，给 World 消费 */
   private readonly pending: TileChange[] = []
+  /** update() 这一步里"画面需要重写矩阵"的格子（只有动过的那些） */
+  readonly touched: number[] = []
 
   constructor() {
     this.states = this.tiles.map(() => freshState('solid'))
@@ -116,8 +108,10 @@ export class TileField {
   }
 
   /**
-   * 重排角色（开跑 / 重开一局时调用）。
-   * 每格独立随机，但每个区间至少保底 2 块消失、1 块回弹，避免整段全是实心。
+   * 重排身份（开跑 / 重开一局时调用）。
+   * 每格独立随机抽签，整条赛道没有任何"预设的桥段"；
+   * 只做两件保底：终点前最后几米永远实心（别让人在终点线上掉下去）、
+   * 全局至少各有 6 块消失 / 3 块回弹（极端运气也不会整条路都是实心）。
    */
   reset(rng: () => number = Math.random): void {
     this.assignmentId += 1
@@ -130,53 +124,106 @@ export class TileField {
       st.solid = true
     }
     for (let i = 0; i < this.tiles.length; i++) {
+      const def = this.tiles[i]
+      // 终点前 7 m（-313..-320）保持实心：不能在压线那一步掉进虚空
+      if (def.z <= TILE.safeFinishZ) continue
       const roll = rng()
       const role: TileRole =
-        roll < TILE.vanishChance ? 'vanish' : roll < TILE.vanishChance + TILE.bounceChance ? 'bounce' : 'solid'
+        roll < TILE.vanishChance
+          ? 'vanish'
+          : roll < TILE.vanishChance + TILE.bounceChance
+            ? 'bounce'
+            : 'solid'
       this.states[i].role = role
     }
-    // 保底：按区间补齐消失格与回弹格
-    for (let zone = 0; zone < TILE_ZONES.length; zone++) {
-      const idx = this.states.map((s, i) => ({ s, i })).filter((e) => this.tiles[e.i].zone === zone)
-      const vanishCnt = idx.filter((e) => e.s.role === 'vanish').length
-      const bounceCnt = idx.filter((e) => e.s.role === 'bounce').length
-      for (let need = vanishCnt; need < 2; need++) {
-        const pool = idx.filter((e) => e.s.role === 'solid')
-        if (pool.length === 0) break
-        pool[Math.floor(rng() * pool.length)].s.role = 'vanish'
-      }
-      if (bounceCnt === 0) {
-        const pool = idx.filter((e) => e.s.role === 'solid')
-        if (pool.length > 0) pool[Math.floor(rng() * pool.length)].s.role = 'bounce'
+    // 全局保底
+    let vanishCnt = 0
+    let bounceCnt = 0
+    for (const st of this.states) {
+      if (st.role === 'vanish') vanishCnt += 1
+      else if (st.role === 'bounce') bounceCnt += 1
+    }
+    const fill = (role: TileRole, need: number): void => {
+      for (let k = 0; k < need; k++) {
+        const pool = this.tiles.map((_, i) => i).filter((i) => this.states[i].role === 'solid')
+        if (pool.length === 0) return
+        this.states[pool[Math.floor(rng() * pool.length)]].role = role
       }
     }
+    if (vanishCnt < 6) fill('vanish', 6 - vanishCnt)
+    if (bounceCnt < 3) fill('bounce', 3 - bounceCnt)
     this.pending.length = 0
+    this.touched.length = 0
+  }
+
+  /** 调试/验收用：把某一块直接改成指定身份（不改变外观） */
+  setRole(index: number, role: TileRole): boolean {
+    const st = this.states[index]
+    if (!st) return false
+    st.role = role
+    st.phase = 'idle'
+    st.t = 0
+    st.wait = 0
+    st.cooldown = 0
+    st.solid = true
+    this.touched.push(index)
+    return true
+  }
+
+  /** 调试/验收用：把所有格子都变回实心（老回归脚本用它排除随机性） */
+  clearSpecial(): number {
+    let cleared = 0
+    for (let i = 0; i < this.states.length; i++) {
+      const st = this.states[i]
+      if (st.role !== 'solid') {
+        st.role = 'solid'
+        cleared += 1
+      }
+      if (st.phase !== 'idle') {
+        st.phase = 'idle'
+        st.t = 0
+        st.wait = 0
+      }
+      st.cooldown = 0
+      if (!st.solid) {
+        st.solid = true
+        this.pending.push({ index: i, solid: true })
+      }
+    }
+    return cleared
+  }
+
+  /** 由世界坐标反查格子下标（不在网格内返回 -1） */
+  indexAt(x: number, z: number): number {
+    if (z > TILE_GRID.zStart || z < TILE_GRID.zEnd) return -1
+    const halfW = TRACK.width / 2
+    if (x < -halfW || x > halfW) return -1
+    const col = Math.floor((x + halfW) / TILE_GRID.cell)
+    const row = Math.floor((TILE_GRID.zStart - z) / TILE_GRID.cell)
+    if (col < 0 || col >= TILE_GRID.cols || row < 0 || row >= TILE_GRID.rows) return -1
+    return row * TILE_GRID.cols + col
   }
 
   /**
-   * 玩家踩到格子：返回这一格的角色事件（'vanish' 开始抖、'bounce' 立刻弹）。
+   * 玩家踩到格子：返回这一格的身份（'vanish' 开始抖、'bounce' 立刻弹）。
    * footY 必须接近地面（站在格子上），空中掠过不触发。
    */
   probe(x: number, z: number, footY: number): 'vanish' | 'bounce' | null {
     if (footY > 0.45 || footY < -0.8) return null
-    const reach = PLAYER.radius * 0.7
-    for (let i = 0; i < this.tiles.length; i++) {
-      const def = this.tiles[i]
-      if (Math.abs(x - def.x) > def.width / 2 + reach) continue
-      if (Math.abs(z - def.z) > def.depth / 2 + reach) continue
-      const st = this.states[i]
-      if (!st.solid || st.phase !== 'idle' || st.cooldown > 0) continue
-      if (st.role === 'vanish') {
-        st.phase = 'tremble'
-        st.t = 0
-        return 'vanish'
-      }
-      if (st.role === 'bounce') {
-        st.phase = 'bump'
-        st.t = 0
-        st.cooldown = TILE.bounceCooldown
-        return 'bounce'
-      }
+    const i = this.indexAt(x, z)
+    if (i < 0) return null
+    const st = this.states[i]
+    if (!st.solid || st.phase !== 'idle' || st.cooldown > 0) return null
+    if (st.role === 'vanish') {
+      st.phase = 'tremble'
+      st.t = 0
+      return 'vanish'
+    }
+    if (st.role === 'bounce') {
+      st.phase = 'bump'
+      st.t = 0
+      st.cooldown = TILE.bounceCooldown
+      return 'bounce'
     }
     return null
   }
@@ -184,10 +231,13 @@ export class TileField {
   /** 推进状态机，返回本步发生的碰撞体变化（并清空队列） */
   update(dt: number): TileChange[] {
     this.pending.length = 0
+    this.touched.length = 0
     for (let i = 0; i < this.states.length; i++) {
       const st = this.states[i]
       if (st.cooldown > 0) st.cooldown = Math.max(0, st.cooldown - dt)
       if (st.phase === 'idle') continue
+      // 这一步动过的格子都要重写实例矩阵（包括"刚好回到 idle"的那一帧）
+      this.touched.push(i)
       st.t += dt
       switch (st.phase) {
         case 'tremble':
@@ -271,21 +321,23 @@ export class TileField {
     }
   }
 
-  /** 验收快照：每格的坐标 / 角色 / 相位 / 是否有碰撞 */
+  /** 验收快照：每格的坐标 / 身份 / 相位 / 是否有碰撞 */
   snapshot(): Array<{
     index: number
-    zone: number
     x: number
     z: number
+    col: number
+    row: number
     role: TileRole
     phase: TilePhase
     solid: boolean
   }> {
     return this.tiles.map((def, i) => ({
       index: i,
-      zone: def.zone,
       x: def.x,
       z: def.z,
+      col: def.col,
+      row: def.row,
       role: this.states[i].role,
       phase: this.states[i].phase,
       solid: this.states[i].solid,

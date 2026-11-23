@@ -191,6 +191,8 @@ async def main() -> int:
             else:
                 raise SystemExit("页面未就绪")
 
+            # 赛道上现在是随机方格陷阱，老回归只测手感/地形，先全部变回实心
+            await cdp.eval_js("window.__PPR.clearTiles && window.__PPR.clearTiles()")
             await asyncio.sleep(0.6)
             result = await cdp.eval_js(MEASURE_JS, timeout_s=30)
     finally:

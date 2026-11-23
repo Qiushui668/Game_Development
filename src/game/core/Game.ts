@@ -23,7 +23,7 @@ import {
 } from '@/game/combat/AttackSystem'
 import { HealthState } from '@/game/combat/Health'
 import { NameTag } from '@/game/actor/NameTag'
-import { TILE_ZONES } from '@/game/physics/TileField'
+import { TILE_GRID } from '@/game/physics/TileField'
 import { parseColor, recallColor, recallNickname } from '@/game/core/Profile'
 import { RemotePlayer } from '@/game/net/RemotePlayer'
 import type { ClientEvent, NetAttackKind, PlayerStatePayload } from '@/types/network'
@@ -349,12 +349,12 @@ export class Game {
                   parent: this.ownTag.sprite.parent === this.jelly?.group,
                 }
               : null,
-          /** 自动化验收用：方格桥全量快照（角色 / 相位 / 坐标 / 碰撞）+ 随机批次号 */
+          /** 自动化验收用：赛道方格全量快照（身份 / 相位 / 坐标 / 碰撞）+ 随机批次号 */
           getTiles: () =>
             this.world
               ? {
                   assignmentId: this.world.tiles.assignmentId,
-                  zones: TILE_ZONES.map((z) => ({ ...z })),
+                  grid: { ...TILE_GRID },
                   tiles: this.world.tiles.snapshot(),
                 }
               : null,
@@ -372,11 +372,18 @@ export class Game {
           /** 自动化验收用：按给定初速推自己一把（量击退距离，不扣血） */
           pushPlayer: (dirX: number, dirZ: number, speed: number, hop = 0, stun?: number) =>
             this.player?.applyKnockback({ dirX, dirZ, speed, hop, stun }) ?? false,
-          /** 自动化验收用：重新随机方格桥角色（不用等整局重开） */
+          /** 自动化验收用：重新随机方格身份（不用等整局重开） */
           rerollTiles: () => {
             this.world?.resetTiles()
             return this.world ? this.world.tiles.assignmentId : null
           },
+          /** 自动化验收用：方格渲染口径（同一材质 / 无实例色 / 同尺寸同厚度） */
+          getTileRender: () => (this.world ? this.world.tileRenderInfo() : null),
+          /** 自动化验收用：指定某块身份（验消失 / 回弹时把格子钉在想要的位置） */
+          setTileRole: (index: number, role: 'solid' | 'vanish' | 'bounce') =>
+            this.world ? this.world.tiles.setRole(index, role) : false,
+          /** 自动化验收用：把所有方格变回实心（老回归脚本用它排除随机性） */
+          clearTiles: () => (this.world ? this.world.clearTileTraps() : -1),
           /** 自动化验收用：远端玩家头顶血条读到的血量（验证对方血量可见） */
           getRemotes: () =>
             [...this.remotes.entries()].map(([id, r]) => ({

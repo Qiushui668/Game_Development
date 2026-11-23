@@ -299,6 +299,8 @@ async def main() -> int:
             else:
                 raise SystemExit("页面未就绪（__PPR.attack 不存在，可能是 HMR 未生效）")
 
+            # 赛道上现在是随机方格陷阱，老回归只测攻击规则，先全部变回实心
+            await cdp.eval_js("window.__PPR.clearTiles && window.__PPR.clearTiles()")
             await asyncio.sleep(0.8)
             result = await cdp.eval_js(MEASURE_JS, timeout_s=90)
 

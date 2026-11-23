@@ -1,32 +1,42 @@
 {
   "url": "http://localhost:5173/",
-  "collectedAt": "2026-11-23 13:50:35",
+  "collectedAt": "2026-11-23 14:37:12",
   "pass": true,
   "results": [
     {
+      "name": "昵称输入框没有默认值（初始为空）",
+      "ok": true,
+      "detail": "{\"value\": \"\", \"placeholder\": \"输入昵称（最多 12 字）\", \"required\": true, \"autocomplete\": \"off\"}"
+    },
+    {
+      "name": "昵称为空时「进入游戏」不可用（不能空着进）",
+      "ok": true,
+      "detail": "{\"goDisabled\": true, \"goText\": \"进入游戏\"}"
+    },
+    {
       "name": "头顶血条：昵称上方显示 100/100",
       "ok": true,
-      "detail": "{\"text\": \"玩家208\", \"hp\": 100, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
+      "detail": "{\"text\": \"验收员\", \"hp\": 100, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
     },
     {
       "name": "受伤后头顶血条数字同步（轻击 -34 → 66）",
       "ok": true,
-      "detail": "{\"text\": \"玩家208\", \"hp\": 66, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
+      "detail": "{\"text\": \"验收员\", \"hp\": 66, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
     },
     {
       "name": "重击 -70 时头顶血条显示 30",
       "ok": true,
-      "detail": "{\"text\": \"玩家208\", \"hp\": 30, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
+      "detail": "{\"text\": \"验收员\", \"hp\": 30, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
     },
     {
       "name": "血量归零复活后头顶血条回满 100",
       "ok": true,
-      "detail": "{\"text\": \"玩家208\", \"hp\": 100, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
+      "detail": "{\"text\": \"验收员\", \"hp\": 100, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"parent\": true}"
     },
     {
-      "name": "柱子击退初速已调大（22 m/s，其它障碍仍是 10.5）",
+      "name": "柱子击退初速仍是 22 m/s（其它障碍 10.5）",
       "ok": true,
-      "detail": "{\"knockbackSpeed\": 10.5, \"sweepKnockbackSpeed\": 22, \"sweepKnockbackHop\": 4, \"sweepSpeedScale\": 1.6, \"tileBounceSpeed\": 31, \"tileBounceStun\": 1.5, \"tileVanishChance\": 0.42, \"tileBounceChance\": 0.16}"
+      "detail": "{\"knockbackSpeed\": 10.5, \"sweepKnockbackSpeed\": 22, \"sweepKnockbackHop\": 4, \"sweepSpeedScale\": 1.6, \"tileBounceSpeed\": 31, \"tileBounceStun\": 1.5, \"tileVanishChance\": 0.04, \"tileBounceChance\": 0.025}"
     },
     {
       "name": "按柱子初速被击退：实测退 7–8.5 m",
@@ -39,29 +49,44 @@
       "detail": "moved=8.06 hp=90 log=[{'amount': 70, 'cause': 'heavy'}, {'amount': 10, 'cause': 'obstacle'}]"
     },
     {
-      "name": "赛道上有 3 段方格桥（共 54 格）",
+      "name": "整条赛道铺满方格：6 列 × 114 行 = 684 块 3 m 方格（z 20 → -322）",
       "ok": true,
-      "detail": "{\"id\": 1, \"tiles\": 54, \"zones\": 3, \"vanish\": 20, \"bounce\": 9, \"solid\": 25, \"roles\": \"vsssbvvvssvsvsbbvvvbsssssvvbbsvvvbbssvsvssbsvvvsvsssss\"}"
+      "detail": "{\"cols\": 6, \"rows\": 114, \"zStart\": 20, \"zEnd\": -322, \"cell\": 3, \"width\": 3}"
     },
     {
-      "name": "方格随机抽成 消失 / 回弹 / 实心 三种角色",
+      "name": "每块格子外观完全一致：同一材质同一张贴图、无实例色、同尺寸同厚度",
       "ok": true,
-      "detail": "vanish=20 bounce=9 solid=25"
+      "detail": "{\"instances\": 684, \"materialId\": 20, \"hasMap\": true, \"usesInstanceColor\": false, \"width\": 3, \"depth\": 3, \"thickness\": 0.26, \"bodyWidth\": 3}"
     },
     {
-      "name": "重新抽取会换一批角色（每局随机）",
+      "name": "开局随机抽身份：消失 / 回弹 / 实心三类齐备（约 4% / 2.5%）",
       "ok": true,
-      "detail": "id 1 → 2  sameLayout=False"
+      "detail": "vanish=26 bounce=20 solid=638 (概率 0.04/0.025)"
+    },
+    {
+      "name": "陷阱散落在赛道任意位置（10 段等分里消失格铺到 ≥5 段、回弹格 ≥4 段、合计 ≥8 段，相邻陷阱空档 ≤150 m）",
+      "ok": true,
+      "detail": "消失段 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] · 回弹段 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] · 合计段 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] · 最大空档 39 m · vanish z [-311.5, 12.5] cols [0, 1, 2, 3, 4, 5] · bounce z [-296.5, 18.5] cols [0, 1, 2, 3, 4, 5]"
+    },
+    {
+      "name": "终点前 7 m 保底实心（-313 之后没有陷阱，压线不会掉下去）",
+      "ok": true,
+      "detail": "vanishZ=[-311.5, 12.5] bounceZ=[-296.5, 18.5]"
+    },
+    {
+      "name": "重新抽取会换一批身份（每局随机）",
+      "ok": true,
+      "detail": "id 2 → 3 sameLayout=False"
     },
     {
       "name": "踩到消失格：先抖动再塌（相位走过 tremble/drop/gone）",
       "ok": true,
-      "detail": "phaseSeen=gone"
+      "detail": "index=63 at={'x': 1.5, 'z': -11.5} phaseSeen=gone"
     },
     {
       "name": "方格塌了人掉进虚空 → 回起点满血复活（deaths +1）",
       "ok": true,
-      "detail": "{\"hp\": 100, \"deaths\": 2, \"z\": 3.5, \"x\": 0, \"solid\": false, \"phase\": \"gone\", \"logLen\": 4, \"damageLog\": [{\"amount\": 70, \"cause\": \"heavy\"}, {\"amount\": 70, \"cause\": \"heavy\"}, {\"amount\": 10, \"cause\": \"obstacle\"}]}"
+      "detail": "{\"hp\": 100, \"deaths\": 2, \"z\": 3.499999523162842, \"x\": 0, \"solid\": false, \"phase\": \"gone\", \"logLen\": 4, \"damageLog\": [{\"amount\": 70, \"cause\": \"heavy\"}, {\"amount\": 70, \"cause\": \"heavy\"}, {\"amount\": 10, \"cause\": \"obstacle\"}]}"
     },
     {
       "name": "掉进虚空不算被扣血（伤害流水里没有新增伤害）",
@@ -76,7 +101,7 @@
     {
       "name": "踩到回弹格真的被弹回十几米（≥9 m、进入硬直、格子播了压缩动画）",
       "ok": true,
-      "detail": "dz=11.26 stunned=True phase=idle trace=[{'t': 100, 'z': 2.7, 'y': 1.14, 'sp': 24.39, 'st': True}, {'t': 200, 'z': 4.83, 'y': 1.96, 'sp': 19.18, 'st': True}, {'t': 300, 'z': 6.5, 'y': 2.54, 'sp': 15.09, 'st': True}, {'t': 400, 'z': 7.81, 'y': 2.88, 'sp': 11.87, 'st': True}, {'t': 500, 'z': 8.85, 'y': 2.98, 'sp': 9.34, 'st': True}, {'t': 600, 'z': 9.66, 'y': 2.82, 'sp': 7.34, 'st': True}, {'t': 700, 'z': 10.3, 'y': 2.38, 'sp': 5.78, 'st': True}, {'t': 800, 'z': 10.88, 'y': 1.52, 'sp': 4.37, 'st': True}, {'t': 900, 'z': 11.26, 'y': 0.49, 'sp': 3.43, 'st': True}]"
+      "detail": "index=75 dz=11.20 stunned=True phase=idle trace=[{'t': 100, 'z': 2.7, 'y': 1.14, 'sp': 24.39, 'st': True}, {'t': 200, 'z': 4.83, 'y': 1.96, 'sp': 19.18, 'st': True}, {'t': 300, 'z': 6.5, 'y': 2.54, 'sp': 15.09, 'st': True}, {'t': 400, 'z': 7.81, 'y': 2.88, 'sp': 11.87, 'st': True}, {'t': 500, 'z': 8.85, 'y': 2.98, 'sp': 9.34, 'st': True}, {'t': 600, 'z': 9.66, 'y': 2.82, 'sp': 7.34, 'st': True}, {'t': 700, 'z': 10.3, 'y': 2.38, 'sp': 5.78, 'st': True}, {'t': 800, 'z': 10.8, 'y': 1.67, 'sp': 4.54, 'st': True}, {'t': 900, 'z': 11.2, 'y': 0.68, 'sp': 3.58, 'st': True}]"
     },
     {
       "name": "回弹不扣血（只延缓前进）",

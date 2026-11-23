@@ -28,8 +28,9 @@ const hex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`
 const swatches = CROWD_COLORS.slice(0, 8).map(hex)
 
 onMounted(() => {
+  // 昵称必须玩家自己输入：输入框永远是空的，也不给任何默认值（只记配色）
+  nickname.value = ''
   const saved = recallIdentity()
-  nickname.value = saved.nickname || `玩家${Math.floor(Math.random() * 900 + 100)}`
   if (saved.color && swatches.includes(saved.color)) color.value = saved.color
 })
 
@@ -115,6 +116,11 @@ function openMulti(): void {
               class="gate-input"
               maxlength="12"
               placeholder="输入昵称（最多 12 字）"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck="false"
+              required
               autofocus
             />
             <button class="primary gate-go" type="submit" :disabled="!nickname.trim()">进入游戏</button>

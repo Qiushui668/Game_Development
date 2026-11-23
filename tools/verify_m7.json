@@ -1,6 +1,6 @@
 {
   "url": "http://localhost:5173/",
-  "collectedAt": "2026-11-23 13:52:01",
+  "collectedAt": "2026-11-23 14:40:15",
   "pass": true,
   "results": [
     {
@@ -21,7 +21,7 @@
     {
       "name": "创建房间得到 4 位房间号",
       "ok": true,
-      "detail": "code=2226"
+      "detail": "code=8893"
     },
     {
       "name": "只有 1 人时开始按钮禁用（最少 2 人）",
@@ -56,7 +56,7 @@
     {
       "name": "房主跑动被第二台机器看到（远端位置更新）",
       "ok": true,
-      "detail": "z 3.50 -> -6.60"
+      "detail": "z 3.50 -> -6.67"
     },
     {
       "name": "双方头顶昵称与本人大门填的一致",
@@ -121,7 +121,7 @@
     {
       "name": "重击一次就让对面倒地眩晕",
       "ok": true,
-      "detail": "{\"lightHits\": 0, \"knockdowns\": 2, \"stunLeft\": 0.6833333333333323, \"down\": true}"
+      "detail": "{\"lightHits\": 0, \"knockdowns\": 2, \"stunLeft\": 0.6999999999999991, \"down\": true}"
     },
     {
       "name": "重击 -70（满血 100 → 30）",
@@ -161,7 +161,7 @@
     {
       "name": "双人联机下帧率仍 >= 30",
       "ok": true,
-      "detail": "fps=59.8 p99=16.8 ms draw=68"
+      "detail": "fps=58.3 p99=33.3 ms draw=62"
     }
   ]
 }

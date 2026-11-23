@@ -201,6 +201,8 @@ async def wait_game_ready(page: Page, timeout: float = 40.0) -> None:
         timeout=timeout,
         interval=0.3,
     )
+    # 赛道铺满随机方格陷阱：联机回归只验同步/血量/击杀，先全部变回实心
+    await page.js("window.__PPR.clearTiles && window.__PPR.clearTiles()")
 
 
 async def run(args: argparse.Namespace) -> int:

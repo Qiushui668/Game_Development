@@ -13,7 +13,7 @@ import {
   SPIKE_STRIPS,
   SWEEPERS,
 } from '@/game/physics/ObstacleField'
-import { TileField, TILE_ZONES } from '@/game/physics/TileField'
+import { TileField, TILE_GRID } from '@/game/physics/TileField'
 import { QuizWalls, QUIZ_WALL_COLLIDER_WIDTH, QUIZ_WALL_HEIGHT } from '@/game/scene/QuizWalls'
 import { QUIZ_GATES } from '@/game/quiz/QuizSystem'
 
@@ -24,8 +24,7 @@ interface DynamicEntry {
 
 /** 棋盘贴图一格 = 1.5 m，一张贴图 2×2 格 */
 const CHECKER_TILE = 3
-/** 主赛道地面在 z 轴上的两端：起点平台末端 +20 → 终点缓冲末端 */
-const FLOOR_Z_START = 20
+/** 主赛道地面在 z 轴上的终点端：终点缓冲末端（起点端 +20 由方格网 / 起点平台接管） */
 const FLOOR_Z_END = -(TRACK.length + TRACK.runoff)
 
 /** 斜坡参数：坡度 10.6°，跑上去能验证控制器贴坡与落坡 */
@@ -57,12 +56,12 @@ export class GameWorld {
   private readonly pendulumGroups: THREE.Group[] = []
   /** 答题墙碰撞体；解开一面就删一个 */
   private readonly quizColliders: Array<RAPIER.Collider | null> = []
-  /** 方格桥：状态机（随机消失 / 回弹）+ InstancedMesh + 每格一个 cuboid */
+  /** 赛道方格：状态机（随机消失 / 回弹）+ InstancedMesh + 每格一个 cuboid */
   readonly tiles = new TileField()
   private tileMesh: THREE.InstancedMesh | null = null
   private readonly tileColliders: Array<RAPIER.Collider | null> = []
   private readonly tileDummy = new THREE.Object3D()
-  /** 主赛道被方格桥切开后的实心地面段（构造时算一次） */
+  /** 主赛道交给方格网后，只剩起点平台与冲线缓冲两块实心地面（构造时算一次） */
   private readonly floorSpans: Array<{ zStart: number; zEnd: number }> = computeFloorSpans()
 
   constructor(private readonly physics: RAPIER.World) {
@@ -116,7 +115,7 @@ export class GameWorld {
     return this.tiles.probe(x, z, footY)
   }
 
-  /** 重开一局：全部方格重新随机 + 立刻长回来 */
+  /** 重开一局：整条赛道重新随机 + 全部长回来 */
   resetTiles(): void {
     for (let i = 0; i < this.tileColliders.length; i++) {
       const c = this.tileColliders[i]
@@ -127,8 +126,49 @@ export class GameWorld {
     for (let i = 0; i < this.tiles.tiles.length; i++) {
       this.tileColliders[i] = this.createTileCollider(i)
     }
-    this.refreshTileColors()
     this.refreshTileMatrices()
+  }
+
+  /** 调试/验收用：把所有方格变回实心（老回归脚本用它排除随机性） */
+  clearTileTraps(): number {
+    const cleared = this.tiles.clearSpecial()
+    const changes = this.tiles.update(0)
+    for (const change of changes) {
+      if (change.solid && !this.tileColliders[change.index]) {
+        this.tileColliders[change.index] = this.createTileCollider(change.index)
+      }
+    }
+    this.refreshTileMatrices()
+    return cleared
+  }
+
+  /**
+   * 调试/验收用：方格渲染口径——验证"外观完全一致"到底靠什么保证：
+   * 全场共用一个材质（同一张贴图）+ 没有实例色覆盖 + 每块尺寸/厚度相同。
+   */
+  tileRenderInfo(): {
+    instances: number
+    materialId: number
+    hasMap: boolean
+    usesInstanceColor: boolean
+    width: number
+    depth: number
+    thickness: number
+    bodyWidth: number
+  } {
+    const mesh = this.tileMesh
+    const mat = (mesh?.material ?? null) as THREE.MeshLambertMaterial | null
+    const first = this.tiles.tiles[0]
+    return {
+      instances: this.tiles.tiles.length,
+      materialId: mat ? mat.id : -1,
+      hasMap: !!(mat && mat.map),
+      usesInstanceColor: !!(mesh && mesh.instanceColor),
+      width: first ? first.width : -1,
+      depth: first ? first.depth : -1,
+      thickness: TILE.thickness,
+      bodyWidth: TILE_GRID.width,
+    }
   }
 
   /** 解开一面答题墙：立刻删碰撞（人能从缝里穿过去），画面淡出 */
@@ -200,8 +240,8 @@ export class GameWorld {
   }
 
   /**
-   * 地面 = 起点平台 + 主赛道被方格桥切成的几段（每段 1 个平面 + 1 个实体）。
-   * 方格桥那几段是真的空洞：方格掉下去以后人就掉进虚空，而不是"看着掉"。
+   * 地面 = 起点平台 + 冲线后的缓冲段。
+   * 中间整条赛道（+20 → -322）都由方格网铺成：方格塌了就是真空洞，人掉进虚空。
    */
   private buildFloors(): THREE.Group {
     const mats = getMaterials()
@@ -390,21 +430,21 @@ export class GameWorld {
   }
 
   /**
-   * 方格桥：整场所有方格用 1 个 InstancedMesh（1 draw call）。
-   * 颜色用实例色——棋盘青/粉相间，回弹格染暖黄；
-   * 碰撞每格一个 cuboid，塌掉就 removeCollider，长回来再 create。
+   * 赛道方格：整场 684 块用 1 个 InstancedMesh（1 draw call）。
+   * 材质与主赛道地面同一张棋盘贴图、同一尺寸、同一高度 ——
+   * 消失格 / 回弹格在外观上和普通格子**完全相同**，看不出来；
+   * 碰撞每块一个 cuboid，塌掉就 removeCollider，长回来再 create。
    */
   private buildTiles(): void {
     const count = this.tiles.tiles.length
     const geo = new THREE.BoxGeometry(1, 1, 1)
     const mesh = new THREE.InstancedMesh(geo, getMaterials().tile, count)
-    mesh.name = 'TileBridges'
+    mesh.name = 'TrackTiles'
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     // 每格一件：不做视锥剔除，反正整条赛道都在画面附近
     mesh.frustumCulled = false
     this.group.add(mesh)
     this.tileMesh = mesh
-    this.refreshTileColors()
     this.refreshTileMatrices()
     for (let i = 0; i < count; i++) {
       this.tileColliders[i] = this.createTileCollider(i)
@@ -421,49 +461,36 @@ export class GameWorld {
     return this.physics.createCollider(desc)
   }
 
-  /** 角色重排后（reset）重新上色：消失格是棋盘色（藏起来才吓人），回弹格是暖黄 */
-  private refreshTileColors(): void {
+  /** 单块格的实例矩阵：抖动 / 下坠 / 升起 / 回弹压缩都在这里落地 */
+  private writeTileMatrix(index: number): void {
     const mesh = this.tileMesh
     if (!mesh) return
-    const color = new THREE.Color()
-    const cyan = new THREE.Color(COLORS.checkerCyan)
-    const pink = new THREE.Color(COLORS.checkerPink)
-    const bounce = new THREE.Color(COLORS.tileBounce)
-    for (let i = 0; i < this.tiles.tiles.length; i++) {
-      const def = this.tiles.tiles[i]
-      const role = this.tiles.roleOf(i)
-      if (role === 'bounce') color.copy(bounce)
-      else color.copy((def.col + def.row) % 2 === 0 ? cyan : pink)
-      mesh.setColorAt(i, color)
+    const def = this.tiles.tiles[index]
+    const vis = this.tiles.visual(index)
+    const dummy = this.tileDummy
+    if (!vis.visible) {
+      dummy.position.set(def.x, -8, def.z)
+      dummy.scale.set(0.001, 0.001, 0.001)
+    } else {
+      // 回弹压缩：顶面不动，往下压扁
+      const h = TILE.thickness * (1 - 0.5 * vis.squash)
+      dummy.position.set(def.x + vis.shake, -h / 2 + vis.dropY, def.z)
+      dummy.scale.set(def.width * 0.99, h, def.depth * 0.99)
     }
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    dummy.rotation.set(0, 0, 0)
+    dummy.updateMatrix()
+    mesh.setMatrixAt(index, dummy.matrix)
   }
 
-  /** 每步重写实例矩阵：抖动 / 下坠 / 升起 / 回弹压缩都在这里落地 */
+  /** 全量重写实例矩阵（开局 / 重开一局时用；平时只刷动过的那几块） */
   private refreshTileMatrices(): void {
     const mesh = this.tileMesh
     if (!mesh) return
-    const dummy = this.tileDummy
-    for (let i = 0; i < this.tiles.tiles.length; i++) {
-      const def = this.tiles.tiles[i]
-      const vis = this.tiles.visual(i)
-      if (!vis.visible) {
-        dummy.position.set(def.x, -8, def.z)
-        dummy.scale.set(0.001, 0.001, 0.001)
-      } else {
-        // 回弹压缩：顶面不动，往下压扁
-        const h = TILE.thickness * (1 - 0.5 * vis.squash)
-        dummy.position.set(def.x + vis.shake, -h / 2 + vis.dropY, def.z)
-        dummy.scale.set(def.width * 0.99, h, def.depth * 0.99)
-      }
-      dummy.rotation.set(0, 0, 0)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
-    }
+    for (let i = 0; i < this.tiles.tiles.length; i++) this.writeTileMatrix(i)
     mesh.instanceMatrix.needsUpdate = true
   }
 
-  /** 推进方格状态机：塌了撤碰撞、长回来补碰撞，再刷一遍矩阵 */
+  /** 推进方格状态机：塌了撤碰撞、长回来补碰撞，只重写动过的那几块矩阵 */
   private updateTiles(dt: number): void {
     const changes = this.tiles.update(dt)
     for (const change of changes) {
@@ -479,7 +506,11 @@ export class GameWorld {
         }
       }
     }
-    this.refreshTileMatrices()
+    const mesh = this.tileMesh
+    if (mesh && this.tiles.touched.length > 0) {
+      for (const index of this.tiles.touched) this.writeTileMatrix(index)
+      mesh.instanceMatrix.needsUpdate = true
+    }
   }
 
   /** 旋转扫地杆：绕立柱公转，参考图的粉色大摆臂 */
@@ -662,18 +693,9 @@ export class GameWorld {
 export const TRACK_COLORS = COLORS
 
 /**
- * 主赛道被方格桥切成几段实心地面：从起点平台末端 +20 一路切到终点缓冲末端。
- * 返回的每一段都要建「平面 + 实体 + 碰撞」三件套，桥那几段就真的空着。
+ * 实心地面只剩冲线缓冲那一小段：主赛道（起点 +20 → 方格网末尾 -322）全部由方格网铺成，
+ * 方格塌了就是真空洞。起点平台单独建（见 buildFloors）。
  */
 function computeFloorSpans(): Array<{ zStart: number; zEnd: number }> {
-  const spans: Array<{ zStart: number; zEnd: number }> = []
-  let zFrom = FLOOR_Z_START
-  // zStart 靠起点（数值更大），先切近的那一段
-  const zones = [...TILE_ZONES].sort((a, b) => b.zStart - a.zStart)
-  for (const zone of zones) {
-    if (zone.zStart < zFrom) spans.push({ zStart: zFrom, zEnd: zone.zStart })
-    if (zone.zEnd < zFrom) zFrom = zone.zEnd
-  }
-  spans.push({ zStart: zFrom, zEnd: FLOOR_Z_END })
-  return spans
+  return [{ zStart: TILE_GRID.zEnd, zEnd: FLOOR_Z_END }]
 }

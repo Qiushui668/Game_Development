@@ -104,7 +104,8 @@ export function getMaterials(): MaterialSet {
     spikeBase: new THREE.MeshLambertMaterial({ color: COLORS.spikeBase }),
     pendulum: new THREE.MeshLambertMaterial({ color: COLORS.pendulum }),
     pendulumArm: new THREE.MeshLambertMaterial({ color: COLORS.pendulumArm }),
-    tile: new THREE.MeshLambertMaterial({ color: 0xffffff }),
+    // 赛道方格用与主地面完全相同的棋盘贴图：尺寸、颜色都和普通路面一致，看不出哪块有陷阱
+    tile: new THREE.MeshLambertMaterial({ map: checker, color: 0xffffff }),
     crown: new THREE.MeshLambertMaterial({ color: COLORS.crown }),
     mountainLight: new THREE.MeshLambertMaterial({ color: COLORS.mountainLight }),
     mountainDeep: new THREE.MeshLambertMaterial({ color: COLORS.mountainDeep }),

@@ -310,6 +310,8 @@ async def main() -> int:
             else:
                 raise SystemExit("页面未就绪（__PPR.getStatus 不存在）")
 
+            # 赛道现在铺满随机方格陷阱，m8 只验血量/障碍/音效，先全部变回实心
+            await cdp.eval_js("window.__PPR.clearTiles && window.__PPR.clearTiles()")
             await asyncio.sleep(1.0)
             got = await cdp.eval_js(MEASURE_JS, timeout_s=90)
             init = got["initial"]
