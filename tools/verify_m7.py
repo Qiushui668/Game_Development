@@ -249,8 +249,8 @@ async def run(args: argparse.Namespace) -> int:
 
         # ---------- 房主建房（昵称已在大门口确认过，房间面板不再问） ----------
         await click(p1, ".mode.online")
-        await p1.wait("!!document.querySelector('.form')", 5)
-        await click(p1, ".primary")
+        await p1.wait("!!document.querySelector('.multi')", 5)
+        await click(p1, ".col.create .primary")
         code = await p1.wait(
             "(() => { const e = document.querySelector('.lobby .code'); "
             "return e && /^\\d{4}$/.test(e.textContent.trim()) ? e.textContent.trim() : false; })()",
@@ -263,13 +263,12 @@ async def run(args: argparse.Namespace) -> int:
         )
         check("只有 1 人时开始按钮禁用（最少 2 人）", start_disabled is True, f"disabled={start_disabled}")
 
-        # ---------- 第二人输房号加入 ----------
+        # ---------- 第二人输房号加入（B1.8 三栏页：右侧那栏直接输号） ----------
         await click(p2, ".mode.online")
-        await p2.wait("!!document.querySelector('.form')", 5)
-        await click(p2, ".tabs .tab:nth-child(2)")
-        await p2.wait("!!document.querySelector('.field input.code')", 5)
-        await set_input(p2, ".field input.code", str(code))
-        await click(p2, ".primary")
+        await p2.wait("!!document.querySelector('.multi')", 5)
+        await p2.wait("!!document.querySelector('.col.join input.code')", 5)
+        await set_input(p2, ".col.join input.code", str(code))
+        await click(p2, ".col.join .primary")
         await p2.wait("!!document.querySelector('.lobby')", 8)
 
         joined = await p1.wait(
@@ -443,13 +442,28 @@ async def run(args: argparse.Namespace) -> int:
         )
         await p2.shot(Path(args.out) / "perf_m7_quiz_interrupt.png")
 
-        # ---------- 冲线：服务器计时 + 榜单 ----------
+        # ---------- 冲线：B1.8 全场结算（一个人到终点，所有人都弹结算，谁也不回大厅） ----------
         await p1.js("window.__PPR.teleport(0, 0.35, -322)")
         await p1.wait("window.__PPR.getNet().finishSent === true", 8)
         await asyncio.sleep(1.6)
-        await p2.js("window.__PPR.teleport(1.6, 0.35, -322)")
-        await p2.wait("window.__PPR.getNet().finishSent === true", 8)
-        await asyncio.sleep(1.4)
+
+        p2_result = await p2.js(
+            "(() => ({ result: !!document.querySelector('.result'), "
+            "lobby: !!document.querySelector('.lobby'), "
+            "race: window.__PPR.getRace().state, "
+            "ghost: !!document.querySelector('.result .ghost'), "
+            "again: !!document.querySelector('.result .again') }))()"
+        )
+        check(
+            "一个人冲线 → 另一个人也被拉进结算（不回大厅、不关房）",
+            p2_result["result"] is True and p2_result["lobby"] is False,
+            json.dumps(p2_result, ensure_ascii=False),
+        )
+        check(
+            "结算页带「返回房间」「再来一局」两个按钮",
+            p2_result["ghost"] is True and p2_result["again"] is True,
+            json.dumps(p2_result, ensure_ascii=False),
+        )
 
         board_rows = await p1.js(
             "(() => { const rows = document.querySelectorAll('.result .board .row'); "
@@ -465,8 +479,9 @@ async def run(args: argparse.Namespace) -> int:
             "return [...rows].map(r => r.textContent.trim()); })()"
         )
         check(
-            "成绩是服务器算的完赛时间（都有效）",
-            isinstance(times, list) and len(times) == 2 and all(t not in ("未完成", "") for t in times),
+            "冲线者成绩是服务器算的完赛时间，没跑完的标「未完成」",
+            isinstance(times, list) and len(times) == 2
+            and sum(1 for t in times if t not in ("未完成", "")) == 1,
             json.dumps(times, ensure_ascii=False),
         )
 

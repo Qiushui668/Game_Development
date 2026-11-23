@@ -7,11 +7,16 @@ const props = defineProps<{
   race: RaceSnapshot | null
   /** 生命值 / 击杀快照（10 Hz） */
   status?: StatusSnapshot | null
-  /** 多人局：结算面板改显示全场名次，按钮改成回房间 */
+  /** 多人局：结算面板改显示全场名次，按钮是"返回房间 / 再来一局" */
   online?: boolean
   board?: LeaderboardRow[]
+  /** 再来一局投票进度（已同意 / 总人数） */
+  rematchVotes?: number
+  rematchTotal?: number
+  /** 自己是否已经投了"再来一局" */
+  voted?: boolean
 }>()
-const emit = defineEmits<{ restart: [] }>()
+const emit = defineEmits<{ restart: []; lobby: []; rematch: [] }>()
 
 /** 3.87 s / 12.34 s / 1:05.42 三种长度自适应 */
 function fmt(ms: number): string {
@@ -33,7 +38,12 @@ const progressPct = computed(() => `${Math.round((props.race?.progress ?? 0) * 1
 const remaining = computed(() => Math.round(props.race?.remaining ?? 0))
 const rows = computed(() => props.board ?? [])
 const showBoard = computed(() => Boolean(props.online) && rows.value.length > 1)
-const againText = computed(() => (props.online ? '回房间' : '再跑一次'))
+/** 结算大数字：自己跑完显示成绩，没跑完（别人冲线时全场结算）显示"未完成" */
+const finished = computed(() => props.race?.finishMs !== null && props.race?.finishMs !== undefined)
+const scoreText = computed(() => (finished.value ? fmt(props.race?.finishMs ?? 0) : '未完成'))
+const votes = computed(() => props.rematchVotes ?? 0)
+const voteTotal = computed(() => props.rematchTotal ?? Math.max(1, rows.value.length))
+const votesText = computed(() => `再来一局 ${votes.value}/${voteTotal.value}`)
 
 /** 血条：满血青绿，半血黄，残血红 */
 const hp = computed(() => props.status?.hp ?? 100)
@@ -95,9 +105,11 @@ const killFlash = computed(() => (props.status?.killFlash ?? 0) > 0)
     <!-- 结算 -->
     <div v-if="showResult" class="result">
       <div class="card">
-        <div class="title">FINISH</div>
-        <div class="score">{{ fmt(race?.finishMs ?? 0) }}</div>
-        <div class="line">最佳成绩 {{ bestText }} · 本局击杀 {{ kills }}</div>
+        <div class="title">{{ online ? 'FINISH · 全场结束' : 'FINISH' }}</div>
+        <div class="score">{{ scoreText }}</div>
+        <div class="line">
+          {{ finished ? `最佳成绩 ${bestText}` : `跑了 ${timeText} · 没到终点` }} · 本局击杀 {{ kills }}
+        </div>
 
         <ol v-if="showBoard" class="board">
           <li v-for="(row, i) in rows" :key="row.playerId" class="row">
@@ -108,7 +120,19 @@ const killFlash = computed(() => (props.status?.killFlash ?? 0) > 0)
           </li>
         </ol>
 
-        <button class="again" @click="emit('restart')">{{ againText }}</button>
+        <!-- 单机：再跑一次就重开自己那一局 -->
+        <button v-if="!online" class="again" @click="emit('restart')">再跑一次</button>
+
+        <!-- 多人：所有人同意再来一局才自动开局，先回房间则整房回大厅 -->
+        <div v-else class="actions">
+          <button class="ghost" @click="emit('lobby')">返回房间</button>
+          <button class="again" :class="{ voted }" :disabled="voted" @click="emit('rematch')">
+            {{ voted ? votesText : '再来一局' }}
+          </button>
+        </div>
+        <div v-if="online" class="hint">
+          {{ voted ? `已同意 ${votes}/${voteTotal}，等其他人点「再来一局」` : '全员都点「再来一局」才会自动开下一局' }}
+        </div>
       </div>
     </div>
   </div>
@@ -431,6 +455,44 @@ const killFlash = computed(() => (props.status?.killFlash ?? 0) > 0)
 .again:active {
   transform: translateY(3px);
   box-shadow: 0 3px 0 #0d9a94;
+}
+
+.again:disabled {
+  cursor: default;
+  opacity: 0.75;
+  transform: none;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.ghost {
+  padding: 11px 22px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: transparent;
+  color: #eaf7ff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ghost:hover {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hint {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  color: #cfe8ff;
+  opacity: 0.85;
 }
 
 @keyframes pop {

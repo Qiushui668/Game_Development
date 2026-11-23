@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import { HEALTH, MATCH, OBSTACLE, PHYSICS, PLAYER, TILE, TRACK } from '@/game/core/GameConfig'
+import { GLOVE, HEALTH, MATCH, OBSTACLE, PHYSICS, PLAYER, TILE, TRACK } from '@/game/core/GameConfig'
 import { GameLoop } from '@/game/core/GameLoop'
 import { RaceStateMachine, type RaceState } from '@/game/core/GameState'
 import { SceneManager } from '@/game/scene/SceneManager'
@@ -23,6 +23,7 @@ import {
 } from '@/game/combat/AttackSystem'
 import { HealthState } from '@/game/combat/Health'
 import { NameTag } from '@/game/actor/NameTag'
+import { GLOVES, gloveFist } from '@/game/physics/ObstacleField'
 import { TILE_GRID } from '@/game/physics/TileField'
 import { parseColor, recallColor, recallNickname } from '@/game/core/Profile'
 import { RemotePlayer } from '@/game/net/RemotePlayer'
@@ -183,6 +184,8 @@ export class Game {
   private netFinishSent = false
   /** 服务器开跑令比 init 先到：init 末尾补发 */
   private pendingNetStart = false
+  /** 被拳套打飞后的剩余滞空时间（到点回起点复活） */
+  private eliminateT = 0
 
   constructor(
     private readonly container: HTMLElement,
@@ -298,6 +301,19 @@ export class Game {
                   rollAngles: [...this.world.obstacles.rollAngles],
                   spikeRise: [...this.world.obstacles.spikeRise],
                   pendulumAngles: [...this.world.obstacles.pendulumAngles],
+                  gloves: this.world.obstacles.gloves.map((g) => ({ ...g })),
+                }
+              : null,
+          /** 自动化验收用：拳套参数与当前状态（沿 Z 位置 / 探出比例 / 拳心坐标） */
+          getGloves: () =>
+            this.world
+              ? {
+                  tuning: { ...GLOVE },
+                  stations: this.world.obstacles.gloves.map((g, i) => ({
+                    ...g,
+                    def: { ...GLOVES[i] },
+                    fist: gloveFist(GLOVES[i], g),
+                  })),
                 }
               : null,
           getTrack: () => ({ length: TRACK.length, finishZ: TRACK.finishZ, spawnZ: MATCH.spawnZ }),
@@ -602,9 +618,24 @@ export class Game {
   }
 
 
-  /** 重新开一局：复位角色、障碍角度、答题墙与计时 */
+  /** 重新开一局（结算页点"再来一局"）：复位角色、障碍角度、答题墙与计时 */
   restart(): void {
     if (this.race.state !== 'Result') return
+    this.prepareRound()
+  }
+
+  /**
+   * 联机 "再来一局"：服务器宣布全票通过后直接开新一局。
+   * 这时本地可能还在结算页、也可能正在跑（中途加入的人），所以不复用 restart 的 Result 限制。
+   */
+  resetRound(): void {
+    if (!this.ready) return
+    this.prepareRound()
+  }
+
+  /** 复位到起跑倒数：角色/障碍/答题墙/计时全部归零 */
+  private prepareRound(): void {
+    this.eliminateT = 0
     this.quiz.reset()
     this.attack.reset()
     this.practiceTarget.reset()
@@ -627,7 +658,33 @@ export class Game {
     this.player?.teleport(this.spawnX, this.spawnY, this.spawnZ)
     this.followCam?.snap()
     this.world?.obstacles.reset()
+    this.debugAxes = null
+    this.race.force('Loading')
     this.startCountdown()
+  }
+
+  /**
+   * 联机：服务器广播"有人冲线了，全场结算"。
+   * 不管是还在跑、正在答题、还是自己早就跑完在看结果，统一进 Result 结算页。
+   */
+  endMatch(elapsedMs: number | null): void {
+    if (!this.ready) return
+    const st = this.race.state
+    if (st === 'Menu' || st === 'Loading' || st === 'Result') return
+    if (st === 'Paused') this.interruptQuiz()
+    if (this.finishMs === null && elapsedMs !== null) this.finishMs = elapsedMs
+    this.player?.halt()
+    this.eliminateT = 0
+    this.debugAxes = null
+    this.attack.reset()
+    this.input?.setClickLock(false)
+    this.input?.exitLock()
+    this.race.force('Result')
+  }
+
+  /** 联机：中途加入的玩家（服务器 player_joined 广播） */
+  addPeer(peer: { id: string; nickname: string; color: string; slot: number }): void {
+    this.addRemote(peer)
   }
 
   /** 按 F 进入答题：抽一道题，锁输入、松开鼠标、压低音乐 */
@@ -731,9 +788,32 @@ export class Game {
     if (this.net) this.net.send({ type: 'died', killerId: null })
   }
 
+  /**
+   * 被巨型拳套打飞：不扣血，但算淘汰一次。
+   * 先让人真的飞出去（击退由 applyKnockback 给的速度决定），GLOVE.flySeconds 后再回起点。
+   */
+  private eliminatePlayer(): void {
+    if (this.eliminateT > 0) return
+    this.eliminateT = GLOVE.flySeconds
+    this.interruptQuiz()
+    this.deathFlashT = 1.6
+    this.debugAxes = null
+    // 飞在半空时收起攻击动作，避免边飞边出拳
+    this.attack.reset()
+  }
+
+  /** 淘汰结算：回起点满血复活，并广播一次死亡（不记击杀归属） */
+  private respawnFromElimination(): void {
+    this.health.voidFall()
+    this.ownTag?.setHealth(HEALTH.max, HEALTH.max)
+    this.player?.teleport(this.spawnX, this.spawnY, this.spawnZ)
+    this.player?.applyStun(0.45)
+    this.followCam?.snap()
+    if (this.net) this.net.send({ type: 'died', killerId: null })
+  }
+
   /** 别人死亡（服务器广播）：清掉他的插值缓冲直接瞬移回起点；若是我杀的，记一次击杀 */
-  applyPeerDeath(playerId: string, killerId: string | null): void {
-    const remote = this.remotes.get(playerId)
+  applyPeerDeath(playerId: string, killerId: string | null): void {    const remote = this.remotes.get(playerId)
     remote?.snapToSpawn()
     remote?.setHealth(HEALTH.max, HEALTH.max)
     const mine = this.net !== null && killerId === this.net.selfId
@@ -943,10 +1023,19 @@ export class Game {
     // 答题期间计时继续累加：冻结 3 s 才有惩罚意义
     if (state === 'Racing' || state === 'Paused') this.raceTimeMs += h * 1000
 
+    // 被拳套打飞的滞空倒计时：到点从起点复活（这 1 s 里人是被甩飞的，不吃输入）
+    if (this.eliminateT > 0) {
+      this.eliminateT -= h
+      if (this.eliminateT <= 0) {
+        this.eliminateT = 0
+        this.respawnFromElimination()
+      }
+    }
+
     let axes = { x: 0, y: 0, sprint: false }
     let jump = false
-    // 只有 Racing 才吃输入：倒数、完赛、结算阶段角色不动
-    if (this.race.state === 'Racing') {
+    // 只有 Racing 才吃输入：倒数、完赛、结算阶段角色不动；被打飞的那 1 s 也不吃
+    if (this.race.state === 'Racing' && this.eliminateT <= 0) {
       if (this.debugAxes) {
         axes = { x: this.debugAxes.x, y: this.debugAxes.y, sprint: this.debugAxes.sprint }
         jump = this.debugJump
@@ -994,11 +1083,16 @@ export class Game {
     if (this.race.state === 'Racing' || this.race.state === 'Respawning') {
       const hit = this.world?.obstacles.hit(st.x, st.y, st.z)
       if (hit) {
-        // 击退自带 0.35 s 冷却：冷却中返回 false，这一刻不再重复扣血（一次接触只扣一次）
-        const applied = player.applyKnockback(hit)
-        if (applied) {
-          // 所有障碍（扫地杆 / 滚轴 / 地刺 / 摆锤）命中统一 −10 生命值
-          this.applyDamage(HEALTH.obstacleDamage, 'obstacle', null)
+        // 巨型拳套：直接打飞淘汰（不扣血，飞完回起点复活）
+        if (hit.eliminate) {
+          if (player.applyKnockback(hit)) this.eliminatePlayer()
+        } else {
+          // 击退自带 0.35 s 冷却：冷却中返回 false，这一刻不再重复扣血（一次接触只扣一次）
+          const applied = player.applyKnockback(hit)
+          if (applied) {
+            // 所有障碍（扫地杆 / 滚轴 / 地刺 / 摆锤）命中统一 −10 生命值
+            this.applyDamage(HEALTH.obstacleDamage, 'obstacle', null)
+          }
         }
       }
     }

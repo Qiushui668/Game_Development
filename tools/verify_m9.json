@@ -1,6 +1,6 @@
 {
   "url": "http://localhost:5173/",
-  "collectedAt": "2026-11-23 14:37:12",
+  "collectedAt": "2026-11-23 16:02:24",
   "pass": true,
   "results": [
     {
@@ -56,22 +56,22 @@
     {
       "name": "每块格子外观完全一致：同一材质同一张贴图、无实例色、同尺寸同厚度",
       "ok": true,
-      "detail": "{\"instances\": 684, \"materialId\": 20, \"hasMap\": true, \"usesInstanceColor\": false, \"width\": 3, \"depth\": 3, \"thickness\": 0.26, \"bodyWidth\": 3}"
+      "detail": "{\"instances\": 684, \"materialId\": 24, \"hasMap\": true, \"usesInstanceColor\": false, \"width\": 3, \"depth\": 3, \"thickness\": 0.26, \"bodyWidth\": 3}"
     },
     {
       "name": "开局随机抽身份：消失 / 回弹 / 实心三类齐备（约 4% / 2.5%）",
       "ok": true,
-      "detail": "vanish=26 bounce=20 solid=638 (概率 0.04/0.025)"
+      "detail": "vanish=27 bounce=20 solid=637 (概率 0.04/0.025)"
     },
     {
       "name": "陷阱散落在赛道任意位置（10 段等分里消失格铺到 ≥5 段、回弹格 ≥4 段、合计 ≥8 段，相邻陷阱空档 ≤150 m）",
       "ok": true,
-      "detail": "消失段 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] · 回弹段 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] · 合计段 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] · 最大空档 39 m · vanish z [-311.5, 12.5] cols [0, 1, 2, 3, 4, 5] · bounce z [-296.5, 18.5] cols [0, 1, 2, 3, 4, 5]"
+      "detail": "消失段 [0, 1, 2, 3, 5, 6, 7, 8, 9] · 回弹段 [0, 1, 2, 3, 4, 5, 6, 8, 9] · 合计段 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] · 最大空档 27 m · vanish z [-305.5, 12.5] cols [0, 1, 2, 3, 4, 5] · bounce z [-302.5, 18.5] cols [0, 1, 2, 3, 4, 5]"
     },
     {
       "name": "终点前 7 m 保底实心（-313 之后没有陷阱，压线不会掉下去）",
       "ok": true,
-      "detail": "vanishZ=[-311.5, 12.5] bounceZ=[-296.5, 18.5]"
+      "detail": "vanishZ=[-305.5, 12.5] bounceZ=[-302.5, 18.5]"
     },
     {
       "name": "重新抽取会换一批身份（每局随机）",
@@ -96,12 +96,12 @@
     {
       "name": "回弹初速 31 m/s：实测往起点方向弹回 ≥10.5 m",
       "ok": true,
-      "detail": "dist=12.31 m (目标约 12 m)"
+      "detail": "dist=12.33 m (目标约 12 m)"
     },
     {
       "name": "踩到回弹格真的被弹回十几米（≥9 m、进入硬直、格子播了压缩动画）",
       "ok": true,
-      "detail": "index=75 dz=11.20 stunned=True phase=idle trace=[{'t': 100, 'z': 2.7, 'y': 1.14, 'sp': 24.39, 'st': True}, {'t': 200, 'z': 4.83, 'y': 1.96, 'sp': 19.18, 'st': True}, {'t': 300, 'z': 6.5, 'y': 2.54, 'sp': 15.09, 'st': True}, {'t': 400, 'z': 7.81, 'y': 2.88, 'sp': 11.87, 'st': True}, {'t': 500, 'z': 8.85, 'y': 2.98, 'sp': 9.34, 'st': True}, {'t': 600, 'z': 9.66, 'y': 2.82, 'sp': 7.34, 'st': True}, {'t': 700, 'z': 10.3, 'y': 2.38, 'sp': 5.78, 'st': True}, {'t': 800, 'z': 10.8, 'y': 1.67, 'sp': 4.54, 'st': True}, {'t': 900, 'z': 11.2, 'y': 0.68, 'sp': 3.58, 'st': True}]"
+      "detail": "index=75 dz=11.20 stunned=True phase=idle trace=[{'t': 100, 'z': 2.29, 'y': 0.98, 'sp': 25.38, 'st': True}, {'t': 200, 'z': 4.51, 'y': 1.84, 'sp': 19.97, 'st': True}, {'t': 300, 'z': 6.25, 'y': 2.46, 'sp': 15.71, 'st': True}, {'t': 400, 'z': 7.61, 'y': 2.84, 'sp': 12.35, 'st': True}, {'t': 500, 'z': 8.69, 'y': 2.98, 'sp': 9.72, 'st': True}, {'t': 600, 'z': 9.66, 'y': 2.82, 'sp': 7.34, 'st': True}, {'t': 700, 'z': 10.3, 'y': 2.38, 'sp': 5.78, 'st': True}, {'t': 800, 'z': 10.8, 'y': 1.67, 'sp': 4.54, 'st': True}, {'t': 900, 'z': 11.2, 'y': 0.68, 'sp': 3.58, 'st': True}]"
     },
     {
       "name": "回弹不扣血（只延缓前进）",

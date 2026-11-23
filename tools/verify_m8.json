@@ -1,6 +1,6 @@
 {
   "url": "http://localhost:5173/",
-  "collectedAt": "2026-11-23 14:39:46",
+  "collectedAt": "2026-11-23 16:01:49",
   "pass": true,
   "results": [
     {
@@ -36,7 +36,7 @@
     {
       "name": "新增大摆锤 2 根且会摆动（摆角 ≈±0.8 rad）",
       "ok": true,
-      "detail": "maxAbs=0.94"
+      "detail": "maxAbs=0.93"
     },
     {
       "name": "走进地刺被命中 −10（伤害流水里障碍扣血恒为 10）",

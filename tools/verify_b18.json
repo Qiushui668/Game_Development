@@ -1,0 +1,167 @@
+{
+  "url": "http://localhost:5173/",
+  "collectedAt": "2026-11-23 16:07:28",
+  "pass": true,
+  "results": [
+    {
+      "name": "全新浏览器：先过昵称门，输入框为空",
+      "ok": true,
+      "detail": "{\"hasInput\": true, \"value\": \"\", \"goDisabled\": true, \"whoami\": null, \"hasHome\": true}"
+    },
+    {
+      "name": "填完昵称进入首页（不再看到昵称门）",
+      "ok": true,
+      "detail": "{\"hasInput\": false, \"value\": null, \"goDisabled\": null, \"whoami\": \"以「验收员」的身份游戏 昵称还有 60 分钟有效 改昵称\", \"hasHome\": true}"
+    },
+    {
+      "name": "有效期内刷新页面：直接跳过昵称门",
+      "ok": true,
+      "detail": "{\"hasInput\": false, \"value\": null, \"goDisabled\": null, \"whoami\": \"以「验收员」的身份游戏 昵称还有 60 分钟有效 改昵称\", \"hasHome\": true}"
+    },
+    {
+      "name": "身份条上给出昵称剩余有效期",
+      "ok": true,
+      "detail": "昵称还有 60 分钟有效"
+    },
+    {
+      "name": "昵称过期 1 小时后：回到昵称门且输入框依然为空",
+      "ok": true,
+      "detail": "{\"hasInput\": true, \"value\": \"\", \"goDisabled\": true, \"whoami\": null, \"hasHome\": true}"
+    },
+    {
+      "name": "多人页是\"左建房 / 右输号\"两栏",
+      "ok": true,
+      "detail": "{\"create\": {\"x\": 214, \"y\": 222, \"w\": 411, \"h\": 206}, \"join\": {\"x\": 639, \"y\": 222, \"w\": 411, \"h\": 206}}"
+    },
+    {
+      "name": "两栏在上、房间列表在下（列表整体更靠下）",
+      "ok": true,
+      "detail": "{\"x\": 214, \"y\": 442, \"w\": 836, \"h\": 102}"
+    },
+    {
+      "name": "下方列出在线房间（带人数 / 阶段）",
+      "ok": true,
+      "detail": "[{\"code\": \"5537\", \"people\": \"1/8 人\", \"phase\": \"等人中\", \"full\": false}]"
+    },
+    {
+      "name": "点房间卡片直接进房（进大厅，房间号一致）",
+      "ok": true,
+      "detail": "{\"lobby\": true, \"code\": \"5537\", \"players\": 2, \"startDisabled\": null, \"startText\": \"\"}"
+    },
+    {
+      "name": "离开房间回到首页",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "赛道两侧一共 4 只巨型拳套（左右交替）",
+      "ok": true,
+      "detail": "[{\"side\": -1, \"zCenter\": -13, \"zRange\": 7}, {\"side\": 1, \"zCenter\": -126, \"zRange\": 6}, {\"side\": -1, \"zCenter\": -206, \"zRange\": 5.5}, {\"side\": 1, \"zCenter\": -280, \"zRange\": 6}]"
+    },
+    {
+      "name": "拳套沿 Z 前后滑动（3 s 内位移 > 2 m），且不越出各自滑轨",
+      "ok": true,
+      "detail": "z -15.45 → -12.39 inRange=True"
+    },
+    {
+      "name": "拳套随机出拳：探出比例在 0–1 之间来回",
+      "ok": true,
+      "detail": "extend 0.00 – 1.00"
+    },
+    {
+      "name": "被拳套打飞 → 记一次淘汰（deaths +1）",
+      "ok": true,
+      "detail": "{\"hit\": {\"extend\": 1, \"at\": 2578.5}, \"before\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 0, \"hurtFlash\": 0, \"deathFlash\": 0, \"killFlash\": 0}, \"after\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 1, \"hurtFlash\": 0, \"deathFlash\": 0, \"killFlash\": 0}}"
+    },
+    {
+      "name": "打飞只在拳头真伸出来时判定（extend ≥ 0.6）",
+      "ok": true,
+      "detail": "{\"extend\": 1, \"at\": 2578.5}"
+    },
+    {
+      "name": "淘汰后回起点复活（z≈3.5、满血）",
+      "ok": true,
+      "detail": "{\"x\": 0, \"y\": 0.019981658458709695, \"z\": 3.5}"
+    },
+    {
+      "name": "鼠标侧键（后退/前进键）被拦下",
+      "ok": true,
+      "detail": "{\"sidePrevented\": true, \"auxPrevented\": true, \"altLeftPrevented\": true, \"backspacePrevented\": true, \"tipShown\": true, \"stillInGame\": true, \"hrefSame\": true}"
+    },
+    {
+      "name": "Alt+← 与 Backspace 被拦下",
+      "ok": true,
+      "detail": "{\"sidePrevented\": true, \"auxPrevented\": true, \"altLeftPrevented\": true, \"backspacePrevented\": true, \"tipShown\": true, \"stillInGame\": true, \"hrefSame\": true}"
+    },
+    {
+      "name": "浏览器返回（history.back）不会把游戏带走",
+      "ok": true,
+      "detail": "{\"sidePrevented\": true, \"auxPrevented\": true, \"altLeftPrevented\": true, \"backspacePrevented\": true, \"tipShown\": true, \"stillInGame\": true, \"hrefSame\": true}"
+    },
+    {
+      "name": "被拦下时给了提示",
+      "ok": true,
+      "detail": "True"
+    },
+    {
+      "name": "出拳瞬间拳头真正伸进赛道（extend > 0.9）",
+      "ok": true,
+      "detail": "{\"extend\": 1, \"z\": -7.255000000000087}"
+    },
+    {
+      "name": "建房后进大厅并显示房间号",
+      "ok": true,
+      "detail": "{\"entered\": true, \"created\": true, \"lobby\": true, \"code\": \"4437\", \"players\": 1, \"startDisabled\": true, \"startText\": \"开始游戏\"}"
+    },
+    {
+      "name": "第二个人进房后大厅显示 2 人并可开始",
+      "ok": true,
+      "detail": "{\"lobby\": true, \"code\": \"4437\", \"players\": 2, \"startDisabled\": false, \"startText\": \"开始游戏\"}"
+    },
+    {
+      "name": "比赛中途加入：新人直接收到\"这局跑到哪了\"",
+      "ok": true,
+      "detail": "{\"type\": \"game_state\", \"state\": \"racing\", \"elapsedMs\": 3647}"
+    },
+    {
+      "name": "房主画面人数跟着变（3 人）",
+      "ok": true,
+      "detail": "{\"inGame\": true, \"badge\": \"房间 4437 · 3 人\", \"race\": \"Racing\", \"result\": null, \"backHome\": false}"
+    },
+    {
+      "name": "有人退出后仍在比赛中（没被踢回首页 / 没关房）",
+      "ok": true,
+      "detail": "{\"inGame\": true, \"badge\": \"房间 4437 · 2 人\", \"race\": \"Racing\", \"result\": null, \"backHome\": false}"
+    },
+    {
+      "name": "别人冲线后自己（还在跑）也弹结算",
+      "ok": true,
+      "detail": "{\"hasGhost\": true, \"hasAgain\": true, \"againText\": \"再来一局\", \"hint\": \"全员都点「再来一局」才会自动开下一局\", \"rows\": 2, \"score\": \"未完成\"}"
+    },
+    {
+      "name": "结算面板有「返回房间」和「再来一局」两个按钮",
+      "ok": true,
+      "detail": "{\"hasGhost\": true, \"hasAgain\": true, \"againText\": \"再来一局\", \"hint\": \"全员都点「再来一局」才会自动开下一局\", \"rows\": 2, \"score\": \"未完成\"}"
+    },
+    {
+      "name": "结算面板写明\"全员同意才开下一局\"",
+      "ok": true,
+      "detail": "全员都点「再来一局」才会自动开下一局"
+    },
+    {
+      "name": "点了再来一局后显示\"已同意 1/2\"，自己不能再点",
+      "ok": true,
+      "detail": "{\"hasGhost\": true, \"hasAgain\": true, \"againText\": \"再来一局 1/2\", \"hint\": \"已同意 1/2，等其他人点「再来一局」\", \"rows\": 2, \"score\": \"未完成\"}"
+    },
+    {
+      "name": "只有 1 票时不开下一局（仍然停在结算页）",
+      "ok": true,
+      "detail": "{\"race\": \"Result\"}"
+    },
+    {
+      "name": "全员同意后自动开下一局（结算面板消失、重新倒数/起跑）",
+      "ok": true,
+      "detail": "{\"inGame\": true, \"badge\": \"房间 4437 · 2 人\", \"race\": \"Countdown\", \"result\": null, \"backHome\": false}"
+    }
+  ]
+}

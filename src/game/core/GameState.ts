@@ -42,6 +42,14 @@ export class RaceStateMachine {
     this.current = next
   }
 
+  /**
+   * 服务端驱动的强制跳转（第一个冲线 → 全场结算、再来一局开局）。
+   * 这类跳转不遵从本地转换表，但仍然只走这一个入口，方便验收追溯。
+   */
+  force(next: RaceState): void {
+    this.current = next
+  }
+
   reset(): void {
     this.current = 'Menu'
   }

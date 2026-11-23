@@ -1,4 +1,4 @@
-import { OBSTACLE, PLAYER } from '@/game/core/GameConfig'
+import { GLOVE, OBSTACLE, PLAYER, TRACK } from '@/game/core/GameConfig'
 
 /**
  * 障碍布局与命中判定（纯 TS：不 import three、不碰 DOM）。
@@ -126,13 +126,93 @@ export const PENDULUMS: PendulumDef[] = [
   { x: 0, z: -232, pivotY: 7.0, armLength: 5.4, swing: 0.95, speed: 1.25, phase: 1.4, headRadius: 1.0 },
 ]
 
+/**
+ * 巨型拳击手套：挂在左右墙上的固定挂钩，**只沿 Z 前后来回滑动**（不左右移动），
+ * 每个挂钩按自己的周期随机探拳。打中 = 直接把人打飞出赛道（淘汰 → 回起点复活）。
+ * 位置挑在原有障碍之间的空档，且左右交替，跑一趟必然撞见两次以上。
+ */
+export interface GloveDef {
+  /** 挂左墙（-1）还是右墙（+1） */
+  side: -1 | 1
+  /** 沿 Z 滑动的中心 */
+  zCenter: number
+  /** 滑动半径（±米） */
+  zRange: number
+  /** 滑动速度（m/s）：三角波来回的速度 */
+  slideSpeed: number
+  /** 滑动相位 0..1（错开每只手套的节奏） */
+  slidePhase: number
+  /** 出拳周期的相位 0..1 */
+  punchPhase: number
+}
+
+export const GLOVES: GloveDef[] = [
+  { side: -1, zCenter: -13, zRange: 7, slideSpeed: 1.1, slidePhase: 0.15, punchPhase: 0.05 },
+  { side: 1, zCenter: -126, zRange: 6, slideSpeed: 0.95, slidePhase: 0.55, punchPhase: 0.35 },
+  { side: -1, zCenter: -206, zRange: 5.5, slideSpeed: 1.25, slidePhase: 0.8, punchPhase: 0.6 },
+  { side: 1, zCenter: -280, zRange: 6, slideSpeed: 1.0, slidePhase: 0.05, punchPhase: 0.85 },
+]
+
+/** 手套当前状态：滑动到的 z、拳头探出比例 0..1、蓄力回拉比例 0..1 */
+export interface GloveState {
+  z: number
+  /** 0 = 缩在墙里，1 = 完全探出 */
+  extend: number
+  /** 蓄力时拳头往后拉的比例（视觉用，判定不算） */
+  wind: number
+}
+
+const mod1 = (v: number): number => ((v % 1) + 1) % 1
+
+/** 滑动位置：三角波，永远只在 Z 轴上往返（绝不左右移动） */
+export function gloveZ(def: GloveDef, elapsed: number): number {
+  // 一个完整往返 = 4 段 zRange / slideSpeed
+  const period = (4 * def.zRange) / Math.max(0.01, def.slideSpeed)
+  const u = mod1(elapsed / period + def.slidePhase)
+  const tri = u < 0.5 ? u * 4 - 1 : 3 - u * 4
+  return def.zCenter + def.zRange * tri
+}
+
+/**
+ * 出拳节奏（0..1 周期内）：
+ * 0–0.18 蓄力后拉 → 0.18–0.30 快速出拳 → 0.30–0.48 保持 → 0.48–0.66 收回 → 其余待机
+ */
+export function glovePunch(def: GloveDef, elapsed: number): { extend: number; wind: number } {
+  const u = mod1(elapsed / GLOVE.cycle + def.punchPhase)
+  if (u < 0.18) return { extend: 0, wind: u / 0.18 }
+  if (u < 0.3) {
+    const p = (u - 0.18) / 0.12
+    // ease-out：起步极快，末端稳住
+    return { extend: 1 - (1 - p) * (1 - p), wind: 0 }
+  }
+  if (u < 0.48) return { extend: 1, wind: 0 }
+  if (u < 0.66) {
+    const p = (u - 0.48) / 0.18
+    return { extend: 1 - p, wind: 0 }
+  }
+  return { extend: 0, wind: 0 }
+}
+
+/** 拳心世界坐标（判定与视觉共用） */
+export function gloveFist(def: GloveDef, state: GloveState): { x: number; y: number; z: number } {
+  const wallX = (TRACK.width / 2) * def.side
+  const back = state.wind * 0.8
+  return {
+    x: wallX - def.side * (GLOVE.reach * state.extend - back),
+    y: GLOVE.fistY,
+    z: state.z,
+  }
+}
+
 export interface ObstacleHit {
   /** 单位击退方向（世界 XZ） */
   dirX: number
   dirZ: number
   speed: number
   hop: number
-  kind: 'sweeper' | 'roller' | 'spike' | 'pendulum'
+  kind: 'sweeper' | 'roller' | 'spike' | 'pendulum' | 'glove'
+  /** 直接淘汰（拳套打飞）：不走扣血，飞出去后回起点复活 */
+  eliminate?: boolean
 }
 
 /** 扫地杆摆臂的判定高度（轴心） */
@@ -167,6 +247,12 @@ export class ObstacleField {
   readonly spikeRise: number[]
   /** 摆锤摆角（rad） */
   readonly pendulumAngles: number[]
+  /** 拳击手套：滑动位置 / 探出比例 / 蓄力（视觉与判定同一份） */
+  readonly gloves: GloveState[] = GLOVES.map((def) => ({
+    z: gloveZ(def, 0),
+    extend: 0,
+    wind: 0,
+  }))
   /** 运行时长：地刺与摆锤都是绝对时间函数，暂停/重开都干净 */
   private elapsed = 0
 
@@ -175,6 +261,7 @@ export class ObstacleField {
     this.rollAngles = ROLLERS.map((r) => r.phase)
     this.spikeRise = SPIKE_STRIPS.map((s) => spikeRise(s, 0))
     this.pendulumAngles = PENDULUMS.map((p) => pendulumAngle(p, 0))
+    this.refreshGloves()
   }
 
   /** 固定物理步推进（与视觉共用同一角度，杜绝半拍错位） */
@@ -193,6 +280,17 @@ export class ObstacleField {
     for (let i = 0; i < PENDULUMS.length; i++) {
       this.pendulumAngles[i] = pendulumAngle(PENDULUMS[i], this.elapsed)
     }
+    this.refreshGloves()
+  }
+
+  private refreshGloves(): void {
+    for (let i = 0; i < GLOVES.length; i++) {
+      const def = GLOVES[i]
+      const punch = glovePunch(def, this.elapsed)
+      this.gloves[i].z = gloveZ(def, this.elapsed)
+      this.gloves[i].extend = punch.extend
+      this.gloves[i].wind = punch.wind
+    }
   }
 
   /** 重开一局：角度回到初始相位，避免上一局残留位置 */
@@ -204,6 +302,7 @@ export class ObstacleField {
     for (let i = 0; i < PENDULUMS.length; i++) {
       this.pendulumAngles[i] = pendulumAngle(PENDULUMS[i], 0)
     }
+    this.refreshGloves()
   }
 
   /** 摆锤锤头中心（世界坐标），视觉从同一定义出发画 */
@@ -221,6 +320,29 @@ export class ObstacleField {
    */
   hit(x: number, footY: number, z: number): ObstacleHit | null {
     const reach = PLAYER.radius
+
+    // 巨型拳击手套：只在拳头探出过半时判定（正在收/正在出拳的半程不算）
+    for (let i = 0; i < GLOVES.length; i++) {
+      const def = GLOVES[i]
+      const state = this.gloves[i]
+      if (state.extend < GLOVE.hitMinExtend) continue
+      const fist = gloveFist(def, state)
+      if (fist.y + GLOVE.fistRadius < footY) continue
+      if (fist.y - GLOVE.fistRadius > footY + PLAYER.height) continue
+      const dx = x - fist.x
+      const dz = z - fist.z
+      if (Math.hypot(dx, dz) > GLOVE.fistRadius + reach) continue
+      // 往赛道里侧 + 终点方向一起甩：横向（远离墙）为主，带一点往前推
+      const len = Math.hypot(1, 0.55)
+      return {
+        dirX: -def.side / len,
+        dirZ: -0.55 / len,
+        speed: GLOVE.knockbackSpeed,
+        hop: GLOVE.knockbackHop,
+        kind: 'glove',
+        eliminate: true,
+      }
+    }
 
     // 扫地杆：只在脚底低于摆臂顶部时命中——跳过去可以从上面越过
     for (let i = 0; i < SWEEPERS.length; i++) {

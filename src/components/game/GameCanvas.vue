@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import {
   Game,
   type NetConfig,
@@ -11,7 +11,7 @@ import {
 import DebugOverlay from '@/components/game/DebugOverlay.vue'
 import RaceHud from '@/components/game/RaceHud.vue'
 import QuizPanel from '@/components/game/QuizPanel.vue'
-import { backToLobby, onGameEvent, room, roomClient } from '@/net/roomStore'
+import { backToLobby, onGameEvent, room, roomClient, voteRematch } from '@/net/roomStore'
 import { recallColor, recallNickname } from '@/game/core/Profile'
 
 const props = defineProps<{ online: boolean }>()
@@ -72,6 +72,18 @@ onMounted(async () => {
           case 'game_started':
             instance.forceMatchStart()
             break
+          case 'countdown':
+            // 再来一局：本机已经在游戏里（结算页），直接复位进下一局倒数
+            instance.resetRound()
+            break
+          case 'race_over':
+            // 有人冲线：全场一起看结算，别再像以前那样把领先的人独自扔进结果页
+            instance.endMatch(null)
+            break
+          case 'player_joined':
+            // 中途加入：老玩家的画面里补一个远端果冻人
+            instance.addPeer(ev.player)
+            break
           case 'player_left':
             instance.removeRemote(ev.playerId)
             break
@@ -97,12 +109,19 @@ onMounted(async () => {
 })
 
 function restartRace(): void {
-  if (props.online) {
-    backToLobby()
-    emit('exit')
-    return
-  }
   game?.restart()
+}
+
+/** 结算面板「返回房间」：整房回大厅（不关房间、不算退出） */
+function backToRoom(): void {
+  backToLobby()
+}
+
+/** 结算面板「再来一局」：投票，全员都点了服务器才自动开局 */
+const votedRematch = computed(() => room.rematchVoterIds.includes(room.selfId))
+function rematch(): void {
+  if (votedRematch.value) return
+  voteRematch()
 }
 
 function answerQuiz(index: number): void {
@@ -124,14 +143,19 @@ onBeforeUnmount(() => {
     <div v-if="error" class="error">初始化失败：{{ error }}</div>
 
     <div v-if="online" class="room-badge">房间 {{ room.code }} · {{ room.players.length }} 人</div>
-    <button v-if="online" class="exit" @click="emit('exit')">退出房间</button>
+    <button class="exit" @click="emit('exit')">{{ online ? '退出房间' : '返回首页' }}</button>
 
     <RaceHud
       :race="race"
       :status="status"
       :online="online"
       :board="online ? room.board : []"
+      :rematch-votes="online ? room.rematchVotes : 0"
+      :rematch-total="online ? room.rematchTotal : 0"
+      :voted="votedRematch"
       @restart="restartRace"
+      @lobby="backToRoom"
+      @rematch="rematch"
     />
     <QuizPanel :quiz="quiz" @answer="answerQuiz" />
     <DebugOverlay :stats="stats" />

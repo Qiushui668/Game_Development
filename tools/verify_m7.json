@@ -1,6 +1,6 @@
 {
   "url": "http://localhost:5173/",
-  "collectedAt": "2026-11-23 14:40:15",
+  "collectedAt": "2026-11-23 16:09:12",
   "pass": true,
   "results": [
     {
@@ -21,7 +21,7 @@
     {
       "name": "创建房间得到 4 位房间号",
       "ok": true,
-      "detail": "code=8893"
+      "detail": "code=3668"
     },
     {
       "name": "只有 1 人时开始按钮禁用（最少 2 人）",
@@ -56,7 +56,7 @@
     {
       "name": "房主跑动被第二台机器看到（远端位置更新）",
       "ok": true,
-      "detail": "z 3.50 -> -6.67"
+      "detail": "z 3.50 -> -6.66"
     },
     {
       "name": "双方头顶昵称与本人大门填的一致",
@@ -144,14 +144,24 @@
       "detail": "hp=30 deaths=1"
     },
     {
-      "name": "结算面板列出两人成绩",
+      "name": "一个人冲线 → 另一个人也被拉进结算（不回大厅、不关房）",
       "ok": true,
-      "detail": "[\"1房主甲1 杀12.18 s\", \"2玩家乙0 杀13.95 s\"]"
+      "detail": "{\"result\": true, \"lobby\": false, \"race\": \"Result\", \"ghost\": true, \"again\": true}"
     },
     {
-      "name": "成绩是服务器算的完赛时间（都有效）",
+      "name": "结算页带「返回房间」「再来一局」两个按钮",
       "ok": true,
-      "detail": "[\"12.18 s\", \"13.95 s\"]"
+      "detail": "{\"result\": true, \"lobby\": false, \"race\": \"Result\", \"ghost\": true, \"again\": true}"
+    },
+    {
+      "name": "结算面板列出两人成绩",
+      "ok": true,
+      "detail": "[\"1房主甲1 杀12.19 s\", \"2玩家乙0 杀未完成\"]"
+    },
+    {
+      "name": "冲线者成绩是服务器算的完赛时间，没跑完的标「未完成」",
+      "ok": true,
+      "detail": "[\"12.19 s\", \"未完成\"]"
     },
     {
       "name": "结算榜单带击杀列，且全场击杀数 > 0",
@@ -161,7 +171,7 @@
     {
       "name": "双人联机下帧率仍 >= 30",
       "ok": true,
-      "detail": "fps=58.3 p99=33.3 ms draw=62"
+      "detail": "fps=59.4 p99=16.8 ms draw=74"
     }
   ]
 }

@@ -26,15 +26,20 @@
 ```powershell
 npm install          # 安装前端依赖
 npm run dev          # 开发服务器 http://localhost:5173（strictPort）
+npm run lan          # 一键联调：Vite(0.0.0.0) + 房间服务，打印局域网地址
+npm run server       # 只起房间服务（ws://localhost:8000/ws，GET /rooms）
 npm run build        # vue-tsc --noEmit && vite build
 npm run typecheck    # 仅类型检查
 npm run preview      # 预览 dist
 ```
 
-后端（阶段 B 起）：
+验收（全部用项目 `.venv` 的 Python；本机 Bash 不可用，只能 PowerShell，`&&` 不认，用 `;`）：
 
 ```powershell
-.\.venv\Scripts\python.exe backend\server.py
+.\.venv\Scripts\python.exe tools\verify_b18.py     # B1.8 浏览器验收 32 项（含退出守卫 / 中途加入 / 全员结算 / 多人页 / 拳套）
+node tools\smoke_room_b18.mjs                      # B1.8 协议层 23 项（纯 WS，不用浏览器）
+.\.venv\Scripts\python.exe tools\verify_m2.py      # 老回归 m2…m6 / m8 / m9 逐个跑
+.\.venv\Scripts\python.exe tools\verify_m7.py      # 双客户端联机 30+ 项（起两个独立 Chrome）
 ```
 
 ## 3. 目录结构
@@ -46,8 +51,9 @@ Game_Development/
 ├─ server/index.mjs         房间服务端（Node 22 + ws：房间 / 中继 / 裁判）
 ├─ scripts/dev.mjs          一键联调：Vite(0.0.0.0) + 房间服务，打印局域网地址
 ├─ src/
-│  ├─ main.ts / App.vue（首页 ⇄ 游戏 视图切换）
-│  ├─ views/     HomeView.vue（昵称门 → 单人 / 多人入口）/ GameView.vue
+│  ├─ main.ts / App.vue（首页 ⇄ 游戏 视图切换；挂 `exitGuard` 拦截返回手势）
+│  ├─ app/      exitGuard.ts（鼠标侧键 / Alt+← / Backspace / popstate 哨兵 / beforeunload）
+│  ├─ views/     HomeView.vue（昵称门 → 单人 / 多人入口；多人页左建房 / 右输号 / 下方房间列表）/ GameView.vue
 │  ├─ styles/global.css
 │  ├─ components/
 │  │  ├─ home/   RoomLobby.vue（房间号·玩家位 2–8·房主开始·离开）
@@ -58,14 +64,14 @@ Game_Development/
 │  │  ├─ scene/  SceneManager / Materials / Lighting / Environment / World / QuizWalls（答题空气墙）
 │  │  ├─ actor/  JellyBean（程序化果冻人）/ PlayerController（Rapier 胶囊角色）/ FollowCamera（第三人称镜头）/ NameTag（头顶两行 Sprite：血条 + 血量数字 + 昵称）
 │  │  ├─ net/    RemotePlayer（远端果冻人 + 100 ms 插值缓冲 + 自己的名牌与血条）
-│  │  ├─ physics/ ObstacleField（扫地杆/滚轴/地刺/摆锤布局 + 命中判定，纯 TS，服务端可复用）/ TileField（全赛道 684 块方格：逐格随机身份 + 塌陷/回弹状态机，纯 TS）
+│  │  ├─ physics/ ObstacleField（扫地杆/滚轴/地刺/摆锤/**巨型拳套**布局 + 命中判定，纯 TS，服务端可复用）/ TileField（全赛道 684 块方格：逐格随机身份 + 塌陷/回弹状态机，纯 TS）
 │  │  ├─ quiz/   QuizSystem（墙位 / 抽题 / 冻结读秒，纯 TS，服务端可复用）
 │  │  ├─ combat/ AttackSystem（出招状态机 + 击倒规则 + 判定距离）/ Health（血量与伤害表，纯 TS）
 │  │  ├─ audio/  Music（单条 audio 循环 + 答题 duck）/ Sfx（击杀音效，元素池支持连杀叠加）
 │  │  ├─ data/   questions.ts（由 `tools/build_questions.py` 从 Excel 生成，勿手改）
 │  │  ├─ input/  Input（键鼠 + Pointer Lock + 跳跃/F/左右键攻击的边沿触发）
 │  │  └─ utils/  MathUtils
-│  └─ types/     network.ts（协议 v4：位置 / 血量 `h` / 攻击 / 死亡 / 榜单）
+│  └─ types/     network.ts（协议 v5：位置 / 血量 `h` / 攻击 / 死亡 / 榜单 / 房间阶段 / 中途加入 / 全员结算 / 再来一局 / 房间列表）
 ├─ public/audio/ danzai.mp3（背景音乐）/ kill.mp3（1杀音效）
 ├─ docs/         PERFORMANCE / NETWORK_PROTOCOL / DEVELOPMENT
 ├─ tools/        smoke_room.mjs（服务端协议 23 项）/ verify_m7.py（双客户端 31 项）/ verify_m8.py（B1.5 14 项）/ verify_m9.py（B1.6 17 项）/ perf_probe.py / verify_m2…m6.py / build_questions.py
@@ -135,6 +141,16 @@ Game_Development/
 | 陷阱格一眼就能认出来（青/粉渐变 + 暖黄回弹格） | 方格用了实例色，回弹格另染暖黄 | B1.7 整条赛道换成 684 块方格：**所有格子共用同一个材质、同一张棋盘贴图、同一尺寸同一高度**，`InstancedMesh` 不开 `instanceColor`，`getTileRender()` 里断言 `hasMap && !usesInstanceColor` |
 | 随机陷阱只有 3 段桥、位置固定 | 桥段坐标写死（`TILE_ZONES`） | B1.7 去掉"桥段"，`TILE_GRID` 6×114 = 684 块逐格独立随机（消失 4% / 回弹 2.5%），陷阱自然散到整条赛道；只留两处保底：起点平台 z 0..20 与终点前 7 m（`safeFinishZ -313`） |
 | 真方格地面后，老回归脚本边走边随机塌陷 → 必然挂 | 老脚本默认踩的都是实心格 | `Game.clearTiles()`（`World.clearTileTraps()`）把全场改回实心，m2–m8、`perf_probe` 在"就绪后"各调一次；m9 用 `setTileRole(index, role)` 把格子钉到指定位置 |
+| 有人掉线 / 按了浏览器返回 → 整个房间都玩不了 | 旧服务端 `leaveRoom` 直接把房间打回 lobby 并广播 `back_to_lobby`，其他人被踢回首页 | B1.8：`leave_room` **只删人**，不改阶段、不清榜单，只剩 0 人才解散；房主顺延给 `members[0]` |
+| 鼠标点一下就被"返回"带走 | 跑酷要一直按左右键，鼠标侧键 / 触控板左右滑 / `Alt+←` 都是浏览器后退 | 新增 `src/app/exitGuard.ts`：`auxclick`/`mouseup`(button 3·4)、`Alt+←`/`Alt+→`、`Backspace`、`history` 哨兵 + `popstate` 全部拦下并给提示；`beforeunload` 只在房间/比赛中提示 |
+| 一个人冲线后，没跑完的人被晾在原地 | 旧逻辑只给冲线者弹结算 | B1.8 服务器第一个 `finish` 广播 `race_over`；客户端 `Game.endMatch()` 用 `race.force('Result')` 把**所有人**拉进结算（没跑完的显示"未完成"） |
+| 结算页只有"回房间"，没法连续开局 | 旧版要靠房主再点开始 | 结算页两个按钮：「返回房间」发 `back_to_lobby`、「再来一局」发 `rematch`；服务器统计全票后自动 `startGame()`（lobby / results 都能开），客户端收到 `countdown` 调 `Game.resetRound()` 复位 |
+| 比赛中进不来人 / 进来后不知道跑了多久 | 旧版 `join_room` 直接拒 `GAME_IN_PROGRESS` | B1.8 允许 `countdown`/`racing` 加入（≥8 人才 `ROOM_FULL`），给新人补 `game_state {state, elapsedMs}`；老玩家收 `player_joined` 调 `Game.addPeer()` 补远端 |
+| 昵称每次刷新都要重填 | 只记了名字、没记时间 | `Profile` 加 `ppr:nicknameAt` 时间戳，`nicknameFresh()/nicknameLeftMs()` 判 1 小时有效期；有效期内首页直接跳过昵称门，过期回门且输入框仍为空 |
+| 随机出拳的拳头"看着在但打不到" | 视觉与判定各算一套相位 | 拳套只保留**一份**定义：`ObstacleField.GLOVES/gloveZ/glovePunch/gloveFist`，`World.update()` 直接读 `obstacles.gloves` 摆模型，`hit()` 用同一个 `gloveFist` 判球-胶囊距离 |
+| 拳套打飞后还想接着跑 | 淘汰只做了击退 | 命中带 `eliminate: true`：`Game.eliminatePlayer()` 记滞空 1 s（`GLOVE.flySeconds`）→ `respawnFromElimination()` 回起点满血 + 广播 `died{killerId:null}`，这 1 s 里不吃输入 |
+| 拳套看着像"棒棒糖"（细杆顶个球，不像拳击手套） | 手臂半径 0.46 对上 1.5 m 的拳套太细；本体只有一颗球，没有指节/拇指/宽袖口 | 手臂加粗到 0.82（粗机械臂），本体加 4 道指节小球 + 拇指，袖口加宽到 0.72R / 0.95R 并加两道束带；待机时整只缩在墙面，出拳才整只探出 |
+| 拳套静止时悬在跑道半空、看着没挂在墙上 | 旧视觉给拳心加了 0.9 m 固定内推，判定却按"拳心贴墙" | 视觉与判定统一用 `shift = extend × reach − wind × 0.8`：0 时整只收进墙里，手臂长度 = `shift − 0.9R`，露不出来就 `visible = false` |
 
 ## 6. Git
 

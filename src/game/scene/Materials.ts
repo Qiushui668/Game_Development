@@ -17,6 +17,11 @@ export interface MaterialSet {
   spikeBase: THREE.MeshLambertMaterial
   pendulum: THREE.MeshLambertMaterial
   pendulumArm: THREE.MeshLambertMaterial
+  /** 巨型拳击手套：拳套本体 / 暗部 / 袖口 / 墙上挂钩 */
+  glove: THREE.MeshLambertMaterial
+  gloveDark: THREE.MeshLambertMaterial
+  gloveCuff: THREE.MeshLambertMaterial
+  gloveMount: THREE.MeshLambertMaterial
   /** 方格桥（InstancedMesh 用实例色，这里只提供白底材质） */
   tile: THREE.MeshLambertMaterial
   crown: THREE.MeshLambertMaterial
@@ -104,6 +109,10 @@ export function getMaterials(): MaterialSet {
     spikeBase: new THREE.MeshLambertMaterial({ color: COLORS.spikeBase }),
     pendulum: new THREE.MeshLambertMaterial({ color: COLORS.pendulum }),
     pendulumArm: new THREE.MeshLambertMaterial({ color: COLORS.pendulumArm }),
+    glove: new THREE.MeshLambertMaterial({ color: COLORS.glove }),
+    gloveDark: new THREE.MeshLambertMaterial({ color: COLORS.gloveDark }),
+    gloveCuff: new THREE.MeshLambertMaterial({ color: COLORS.gloveCuff }),
+    gloveMount: new THREE.MeshLambertMaterial({ color: COLORS.gloveMount }),
     // 赛道方格用与主地面完全相同的棋盘贴图：尺寸、颜色都和普通路面一致，看不出哪块有陷阱
     tile: new THREE.MeshLambertMaterial({ map: checker, color: 0xffffff }),
     crown: new THREE.MeshLambertMaterial({ color: COLORS.crown }),

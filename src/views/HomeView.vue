@@ -1,40 +1,60 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CROWD_COLORS } from '@/game/core/GameConfig'
+import { nicknameFresh, nicknameLeftMs } from '@/game/core/Profile'
 import RoomLobby from '@/components/home/RoomLobby.vue'
 import {
   createRoom,
   joinRoom,
   recallIdentity,
+  refreshRooms,
   rememberIdentity,
   room,
+  roomList,
 } from '@/net/roomStore'
 
 const emit = defineEmits<{ solo: [] }>()
 
 type Panel = 'none' | 'multi'
 const panel = ref<Panel>('none')
-/** 多人面板里的两种入口：建房 / 输房号 */
-const tab = ref<'create' | 'join'>('create')
 
+/** 昵称门里正在输入的内容：永远是空白的，不预填旧昵称 */
+const draft = ref('')
+/** 已经确认过的昵称（1 小时有效），有值就表示可以跳过昵称门 */
 const nickname = ref('')
 const color = ref('#ff3f8b')
 const code = ref('')
 const busy = ref(false)
 /** 昵称门：必须先确认昵称，才露出单人 / 多人入口 */
 const named = ref(false)
+/** 昵称剩余有效期（分钟），进大厅后给一句"还有多久要重填"的提示 */
+const leftMinutes = ref(0)
 
 const hex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`
 const swatches = CROWD_COLORS.slice(0, 8).map(hex)
 
+let roomTimer = 0
+
 onMounted(() => {
-  // 昵称必须玩家自己输入：输入框永远是空的，也不给任何默认值（只记配色）
-  nickname.value = ''
+  draft.value = ''
   const saved = recallIdentity()
   if (saved.color && swatches.includes(saved.color)) color.value = saved.color
+  // 昵称 1 小时时效：还在有效期内就直接跳过昵称门，不用每次加载页面都重填
+  if (nicknameFresh()) {
+    nickname.value = saved.nickname
+    named.value = true
+    leftMinutes.value = Math.ceil(nicknameLeftMs() / 60000)
+  } else {
+    nickname.value = ''
+    named.value = false
+  }
 })
 
-// 进过房就记住名字与颜色，下次不用再填
+onBeforeUnmount(() => {
+  window.clearInterval(roomTimer)
+})
+
+// 进过房就记住名字与颜色（昵称带时间戳，1 小时后要重新输入）
 watch([nickname, color], () => {
   if (nickname.value.trim()) rememberIdentity(nickname.value.trim(), color.value)
 })
@@ -42,13 +62,22 @@ watch([nickname, color], () => {
 const inRoom = computed(() => room.status === 'lobby' || room.status === 'connecting')
 const canSubmit = computed(() => nickname.value.trim().length > 0 && !busy.value)
 
-/** 确认昵称：写入本地记忆，然后才显示模式选择 */
+/** 确认昵称：写入本地记忆（带时间戳），然后才显示模式选择 */
 function confirmNickname(): void {
-  const name = nickname.value.trim().slice(0, 12)
+  const name = draft.value.trim().slice(0, 12)
   if (!name) return
+  draft.value = ''
   nickname.value = name
   rememberIdentity(name, color.value)
   named.value = true
+  leftMinutes.value = Math.ceil(nicknameLeftMs() / 60000)
+}
+
+/** 主动改昵称：回到空白输入框 */
+function changeNickname(): void {
+  draft.value = ''
+  nickname.value = ''
+  named.value = false
 }
 
 function pickColor(c: string): void {
@@ -62,20 +91,38 @@ async function onCreate(): Promise<void> {
   busy.value = false
 }
 
-async function onJoin(): Promise<void> {
-  if (!canSubmit.value) return
-  if (!/^\d{4}$/.test(code.value.trim())) {
+async function onJoin(target?: string): Promise<void> {
+  const roomCode = (target ?? code.value).trim()
+  if (!/^\d{4}$/.test(roomCode)) {
     room.error = '房间号是 4 位数字'
     return
   }
   busy.value = true
-  await joinRoom(code.value.trim(), nickname.value.trim(), color.value)
+  await joinRoom(roomCode, nickname.value.trim(), color.value)
   busy.value = false
 }
 
 function openMulti(): void {
   panel.value = 'multi'
   room.error = ''
+  void refreshRooms()
+  window.clearInterval(roomTimer)
+  // 面板开着就每 3 s 刷一次"已有房间"，点了直接进
+  roomTimer = window.setInterval(() => void refreshRooms(), 3000)
+}
+
+function closeMulti(): void {
+  panel.value = 'none'
+  window.clearInterval(roomTimer)
+  roomTimer = 0
+}
+
+/** 房间列表里的阶段文案：大厅 = 可进，比赛中 = 也能进（当心被甩在后面） */
+function phaseLabel(phase: string): string {
+  if (phase === 'lobby') return '等人中'
+  if (phase === 'countdown') return '倒计时'
+  if (phase === 'racing') return '比赛中'
+  return '结算中'
 }
 </script>
 
@@ -90,7 +137,7 @@ function openMulti(): void {
       <span class="blob b4" />
     </div>
 
-    <div class="content" :class="{ 'in-room': inRoom }">
+    <div class="content" :class="{ 'in-room': inRoom, compact: panel === 'multi' }">
       <header class="brand">
         <div class="logo">
           <span class="jelly" aria-hidden="true">
@@ -112,7 +159,7 @@ function openMulti(): void {
           <p class="gate-sub">昵称会显示在人物头顶，也会出现在联机榜单里</p>
           <div class="gate-form">
             <input
-              v-model="nickname"
+              v-model="draft"
               class="gate-input"
               maxlength="12"
               placeholder="输入昵称（最多 12 字）"
@@ -123,7 +170,7 @@ function openMulti(): void {
               required
               autofocus
             />
-            <button class="primary gate-go" type="submit" :disabled="!nickname.trim()">进入游戏</button>
+            <button class="primary gate-go" type="submit" :disabled="!draft.trim()">进入游戏</button>
           </div>
           <div class="gate-colors">
             <span class="gate-label">配色</span>
@@ -145,7 +192,8 @@ function openMulti(): void {
         <div class="whoami">
           <span class="whoami-dot" :style="{ background: color }" />
           <span>以「{{ nickname }}」的身份游戏</span>
-        <button class="relink" @click="named = false">改昵称</button>
+          <span v-if="leftMinutes > 0" class="whoami-ttl">昵称还有 {{ leftMinutes }} 分钟有效</span>
+          <button class="relink" @click="changeNickname">改昵称</button>
         </div>
 
         <div v-if="panel === 'none'" class="modes">
@@ -162,36 +210,73 @@ function openMulti(): void {
         </div>
 
         <div v-else class="multi">
-          <div class="tabs">
-            <button class="tab" :class="{ on: tab === 'create' }" @click="tab = 'create'">创建房间</button>
-            <button class="tab" :class="{ on: tab === 'join' }" @click="tab = 'join'">输入房间号加入</button>
-            <button class="back" @click="panel = 'none'">返回</button>
+          <div class="multi-head">
+            <h3>多人游戏 · 局域网 2–8 人</h3>
+            <button class="back" @click="closeMulti">返回</button>
           </div>
 
-          <div class="form">
-            <div class="identity">
-              <span class="swatch on" :style="{ background: color }" />
-              <span class="identity-name">{{ nickname }}</span>
-              <span class="identity-hint">昵称与配色已在上面确认</span>
+          <!-- 上半：左「创建房间」 / 右「输入房间号加入」，各占一半 -->
+          <div class="multi-cols">
+            <section class="col create">
+              <span class="col-title">创建房间</span>
+              <div class="identity">
+                <span class="swatch on" :style="{ background: color }" />
+                <span class="identity-name">{{ nickname }}</span>
+              </div>
+              <p class="col-desc">开一个空房，把房间号发给朋友；房主点开始后全场同时起跑。</p>
+              <button class="primary" :disabled="!canSubmit" @click="onCreate">
+                {{ busy ? '创建中…' : '创建房间' }}
+              </button>
+            </section>
+
+            <section class="col join">
+              <span class="col-title">输入房间号加入</span>
+              <label class="field">
+                <input
+                  v-model="code"
+                  class="code"
+                  maxlength="4"
+                  placeholder="4 位数字"
+                  inputmode="numeric"
+                  @keyup.enter="onJoin()"
+                />
+              </label>
+              <p class="col-desc">房间正在比赛中也能加入（上限 8 人）；人满了会提示稍后再来。</p>
+              <button class="primary" :disabled="!canSubmit" @click="onJoin()">
+                {{ busy ? '加入中…' : '加入房间' }}
+              </button>
+            </section>
+          </div>
+
+          <!-- 下半：目前已有的房间，点一张卡就直接进 -->
+          <section class="rooms">
+            <div class="rooms-head">
+              <span class="col-title">目前在线的房间</span>
+              <button class="mini" @click="refreshRooms()">{{ roomList.loading ? '刷新中…' : '刷新' }}</button>
             </div>
-
-            <label v-if="tab === 'join'" class="field">
-              <span>房间号</span>
-              <input v-model="code" class="code" maxlength="4" placeholder="4 位数字" inputmode="numeric" />
-            </label>
-
-            <button v-if="tab === 'create'" class="primary" :disabled="!canSubmit" @click="onCreate">
-              {{ busy ? '创建中…' : '创建房间' }}
-            </button>
-            <button v-else class="primary" :disabled="!canSubmit" @click="onJoin">
-              {{ busy ? '加入中…' : '加入房间' }}
-            </button>
-
-            <p class="hint">
-              同一局域网用本机 IP 访问本页即可联机，房主点开始后全场同时起跑。<br />
-              房间 2–8 人；答错冻结 3 秒，被人打倒会中断答题。
+            <p v-if="roomList.error" class="rooms-error">房间列表取不到：{{ roomList.error }}</p>
+            <ul v-else-if="roomList.items.length" class="room-list">
+              <li
+                v-for="item in roomList.items"
+                :key="item.code"
+                class="room-item"
+                :class="{ full: item.players >= item.capacity }"
+                @click="item.players < item.capacity && onJoin(item.code)"
+              >
+                <span class="room-code">{{ item.code }}</span>
+                <span class="room-people">{{ item.players }}/{{ item.capacity }} 人</span>
+                <span class="room-phase" :class="item.phase">{{ phaseLabel(item.phase) }}</span>
+                <span class="room-join">{{ item.players >= item.capacity ? '已满' : '加入 →' }}</span>
+              </li>
+            </ul>
+            <p v-else class="rooms-empty">
+              {{ roomList.loaded ? '现在还没有房间，先创建一间吧' : '正在读取房间列表…' }}
             </p>
-          </div>
+          </section>
+
+          <p class="hint">
+            同一局域网用本机 IP 访问本页即可联机。房间 2–8 人；答错冻结 3 秒，被人打倒会中断答题；跑道上还有巨型拳套，被打飞要从起点重跑。
+          </p>
         </div>
       </template>
 
@@ -292,6 +377,22 @@ function openMulti(): void {
 .content.in-room {
   gap: 14px;
   padding-top: 18px;
+}
+
+/* 多人面板要一屏放下"两栏 + 房间列表"：把品牌区收起来 */
+.content.compact {
+  gap: 14px;
+  padding-top: 16px;
+}
+
+.content.compact .logo,
+.content.compact .sub {
+  display: none;
+}
+
+.content.compact h1 {
+  margin: 0;
+  font-size: 30px;
 }
 
 /* 进房后把品牌区压缩，把空间让给房间列表与开始按钮 */
@@ -481,6 +582,15 @@ h1 {
   border-radius: 50%;
 }
 
+.whoami-ttl {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(23, 201, 192, 0.16);
+  color: #0e7d78;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
 .relink {
   margin-left: 4px;
   border: none;
@@ -563,34 +673,186 @@ h1 {
 }
 
 .multi {
-  width: min(560px, 92vw);
+  width: min(880px, 94vw);
   padding: 18px 22px 22px;
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 16px 36px rgba(10, 50, 74, 0.2), inset 0 2px 0 #fff;
 }
 
-.tabs {
+.multi-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-.tab {
-  padding: 9px 16px;
+.multi-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #0e3550;
+}
+
+/* 左建房 / 右输号：两栏等宽 */
+.multi-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 16px 18px;
+  border-radius: 18px;
+  background: rgba(16, 138, 134, 0.07);
+}
+
+.col.create {
+  border: 2px solid rgba(23, 201, 192, 0.28);
+}
+
+.col.join {
+  border: 2px solid rgba(255, 110, 209, 0.3);
+  background: rgba(255, 110, 209, 0.07);
+}
+
+.col-title {
+  font-size: 13.5px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #0e3550;
+}
+
+.col-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #4f7286;
+}
+
+.col .field {
+  margin: 0;
+}
+
+.col .field input.code {
+  flex: 1;
+}
+
+.col .primary {
+  margin-top: auto;
+}
+
+/* 房间列表：一条一行，点一下直接进 */
+.rooms {
+  margin-top: 14px;
+  padding: 14px 16px 12px;
+  border-radius: 18px;
+  background: rgba(16, 138, 134, 0.05);
+}
+
+.rooms-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mini {
+  padding: 5px 12px;
   border: none;
   border-radius: 999px;
-  background: rgba(16, 138, 134, 0.1);
+  background: rgba(16, 138, 134, 0.12);
   color: #0e6b70;
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 700;
+  font-family: inherit;
   cursor: pointer;
 }
 
-.tab.on {
-  background: linear-gradient(180deg, #46f0e6, #17c9c0);
-  color: #03363c;
-  box-shadow: 0 4px 0 #0d9a94;
+.room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 208px;
+  margin: 10px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.room-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(10, 50, 74, 0.08);
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.room-item:hover {
+  transform: translateX(2px);
+  box-shadow: 0 6px 16px rgba(10, 50, 74, 0.14);
+}
+
+.room-item.full {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.room-code {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #0e3550;
+}
+
+.room-people {
+  font-weight: 700;
+  color: #33586d;
+}
+
+.room-phase {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(16, 138, 134, 0.12);
+  color: #0e6b70;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.room-phase.racing,
+.room-phase.countdown {
+  background: rgba(255, 138, 61, 0.16);
+  color: #b2541b;
+}
+
+.room-phase.results {
+  background: rgba(179, 155, 255, 0.22);
+  color: #5a45b0;
+}
+
+.room-join {
+  margin-left: auto;
+  font-weight: 800;
+  color: #17a39d;
+}
+
+.rooms-empty,
+.rooms-error {
+  margin: 10px 0 2px;
+  font-size: 12.5px;
+  color: #4f7286;
+}
+
+.rooms-error {
+  color: #b0324b;
 }
 
 .back {
@@ -600,7 +862,14 @@ h1 {
   font-size: 13px;
   font-weight: 600;
   color: #6b8698;
+  font-family: inherit;
   cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .multi-cols {
+    grid-template-columns: 1fr;
+  }
 }
 
 .form {

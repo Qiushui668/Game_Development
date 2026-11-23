@@ -1,10 +1,11 @@
 /**
  * 局域网房间服务端（阶段 B）。
- * 职责只有三件：房间（建/加/退、容量 2–8、房主转移）、中继（20 Hz player_state、攻击事件）、
- * 裁判（服务器单调时钟算完赛时间、校验 checkpoint 递增）。
+ * 职责只有四件：房间（建/加/退/中途加入、容量 2–8、房主转移、公开房间列表）、
+ * 中继（20 Hz player_state、攻击事件）、裁判（服务器单调时钟算完赛时间）、
+ * 流程（全员结算 + 再来一局投票）。
  *
  * 不做物理模拟、不做反作弊 —— 与 docs/NETWORK_PROTOCOL.md 的权限模型一致。
- * 启动：node server/index.mjs（默认 0.0.0.0:8000，端点 /ws）
+ * 启动：node server/index.mjs（默认 0.0.0.0:8000，HTTP 端点 /health、/rooms，WS 端点 /ws）
  */
 import { createServer } from 'node:http'
 import { performance } from 'node:perf_hooks'
@@ -14,7 +15,7 @@ const PORT = Number(process.env.PORT ?? 8000)
 const HOST = process.env.HOST ?? '0.0.0.0'
 const CAPACITY = 8
 const MIN_PLAYERS = 2
-const PROTOCOL_VERSION = 4
+const PROTOCOL_VERSION = 5
 const COUNTDOWN_MS = 3000
 const KNOCKDOWN_SECONDS = 1
 
@@ -46,8 +47,9 @@ function cleanColor(raw) {
   return '#ff3f8b'
 }
 
-/** @typedef {{ id: string, nickname: string, color: string, ws: import('ws').WebSocket, slot: number, joinedAt: number, finished: boolean, timeMs: number | null, checkpoint: number, falls: number, kills: number }} Member */
-/** @typedef {{ code: string, hostId: string, state: 'lobby' | 'countdown' | 'racing', members: Member[], raceStartAt: number, countdownTimer: ReturnType<typeof setTimeout> | null }} Room */
+/** @typedef {{ id: string, nickname: string, color: string, ws: import('ws').WebSocket, slot: number, joinedAt: number, finished: boolean, timeMs: number | null, checkpoint: number, falls: number, kills: number, rematch: boolean, lateJoin: boolean }} Member */
+/** @typedef {'lobby'|'countdown'|'racing'|'results'} RoomPhase */
+/** @typedef {{ code: string, hostId: string, state: RoomPhase, members: Member[], raceStartAt: number, countdownTimer: ReturnType<typeof setTimeout> | null }} Room */
 
 function roomPlayers(room) {
   return room.members.map((m) => ({
@@ -57,6 +59,8 @@ function roomPlayers(room) {
     host: m.id === room.hostId,
     finished: m.finished,
     slot: m.slot,
+    /** 中途加入的人：客户端据此知道他没跑前半程 */
+    lateJoin: m.lateJoin,
   }))
 }
 
@@ -78,8 +82,28 @@ function broadcastRoomState(room) {
     code: room.code,
     hostId: room.hostId,
     capacity: CAPACITY,
+    state: room.state,
     players: roomPlayers(room),
   })
+}
+
+/** 公开给"已有房间"列表用的精简信息（不暴露 ws / 内部字段） */
+function roomBrief(room) {
+  const host = room.members.find((m) => m.id === room.hostId)
+  return {
+    code: room.code,
+    players: room.members.length,
+    capacity: CAPACITY,
+    phase: room.state,
+    host: host ? host.nickname : '—',
+  }
+}
+
+function publicRooms() {
+  return [...rooms.values()]
+    .filter((r) => r.members.length > 0)
+    .map(roomBrief)
+    .sort((a, b) => a.code.localeCompare(b.code))
 }
 
 /** 重新排站位：按入房先后，0 起，客户端据此算起跑线 X */
@@ -109,30 +133,53 @@ function leaderboard(room) {
     })
 }
 
+function resetMemberStats(room) {
+  for (const m of room.members) {
+    m.finished = false
+    m.timeMs = null
+    m.checkpoint = -1
+    m.falls = 0
+    m.kills = 0
+    m.rematch = false
+  }
+}
+
 function fail(ws, code, message) {
   send(ws, { type: 'error', code, message })
 }
 
+/**
+ * 有人离开 / 掉线。
+ * 关键：**不再把房间状态打回大厅**，也不广播 back_to_lobby —— 其他人正在跑的那局继续跑；
+ * 只有"人走光了"才解散房间，倒数阶段只要还剩人就照常开跑。
+ */
 function leaveRoom(session) {
   const room = session.room
   if (!room) return
+  const member = room.members.find((m) => m.id === session.id)
   session.room = null
   room.members = room.members.filter((m) => m.id !== session.id)
-  if (room.state !== 'lobby' && room.countdownTimer) {
-    clearTimeout(room.countdownTimer)
-    room.countdownTimer = null
-    room.state = 'lobby'
-  }
   if (room.members.length === 0) {
+    if (room.countdownTimer) {
+      clearTimeout(room.countdownTimer)
+      room.countdownTimer = null
+    }
     rooms.delete(room.code)
     console.log(`[room] ${room.code} 解散`)
     return
   }
-  if (room.hostId === session.id) room.hostId = room.members[0].id
+  if (room.hostId === session.id) {
+    room.hostId = room.members[0].id
+    console.log(`[room] ${room.code} 房主转给 ${room.members[0].nickname}`)
+  }
   relayout(room)
   broadcast(room, { type: 'player_left', playerId: session.id })
   broadcastRoomState(room)
-  console.log(`[room] ${room.code} ${session.id} 离开，剩 ${room.members.length} 人`)
+  // 结算阶段有人走：如果剩下的人都投了"再来一局"，那就直接开
+  if (room.state === 'results' && everyoneWantsRematch(room)) startGame(room)
+  console.log(
+    `[room] ${room.code} ${member ? member.nickname : session.id} 离开，剩 ${room.members.length} 人（状态 ${room.state}）`,
+  )
 }
 
 function joinCommon(session, room, nickname, color) {
@@ -148,39 +195,58 @@ function joinCommon(session, room, nickname, color) {
     checkpoint: -1,
     falls: 0,
     kills: 0,
+    rematch: false,
+    /** 中途加入：进来时这局已经跑了一段 */
+    lateJoin: room.state === 'racing' || room.state === 'countdown',
   }
   room.members.push(member)
   session.room = room
   relayout(room)
-  send(session.ws, { type: 'room_state', code: room.code, hostId: room.hostId, capacity: CAPACITY, players: roomPlayers(room) })
-  for (const m of room.members) {
-    if (m.id === member.id) continue
-    if (m.ws.readyState === 1) {
-      m.ws.send(JSON.stringify({ type: 'room_state', code: room.code, hostId: room.hostId, capacity: CAPACITY, players: roomPlayers(room) }))
-    }
+  // 给新人自己：完整房间状态
+  send(session.ws, {
+    type: 'room_state',
+    code: room.code,
+    hostId: room.hostId,
+    capacity: CAPACITY,
+    state: room.state,
+    players: roomPlayers(room),
+  })
+  // 如果这局已经在跑，把"跑到哪了"告诉新人（客户端据此直接进入比赛）
+  if (room.state === 'racing' || room.state === 'countdown') {
+    const elapsedMs = room.raceStartAt > 0 ? performance.now() - room.raceStartAt : 0
+    send(session.ws, { type: 'game_state', state: room.state, elapsedMs: Math.round(elapsedMs) })
   }
-  console.log(`[room] ${room.code} ${nickname}(${member.id}) 加入，共 ${room.members.length} 人`)
+  // 给老玩家：有人来了（含中途加入），客户端据此新增一个远端果冻人
+  broadcast(room, { type: 'player_joined', player: roomPlayers(room).find((p) => p.id === member.id) }, session.ws)
+  broadcastRoomState(room)
+  console.log(
+    `[room] ${room.code} ${nickname}(${member.id}) 加入，共 ${room.members.length} 人${member.lateJoin ? '（中途加入）' : ''}`,
+  )
   return member
 }
 
+function everyoneWantsRematch(room) {
+  return room.members.length > 0 && room.members.every((m) => m.rematch)
+}
+
+/**
+ * 开一局：lobby / results 都能开。
+ * results 开下一局就是"再来一局"投票全通过后的自动开局。
+ */
 function startGame(room) {
-  if (room.state !== 'lobby') return
+  if (room.state === 'countdown' || room.state === 'racing') return
   room.state = 'countdown'
   room.raceStartAt = 0
-  for (const m of room.members) {
-    m.finished = false
-    m.timeMs = null
-    m.checkpoint = -1
-    m.falls = 0
-    m.kills = 0
-  }
+  resetMemberStats(room)
   broadcast(room, { type: 'countdown', seconds: COUNTDOWN_MS / 1000, startsInMs: COUNTDOWN_MS })
+  if (room.countdownTimer) clearTimeout(room.countdownTimer)
   room.countdownTimer = setTimeout(() => {
     room.countdownTimer = null
     if (room.members.length === 0) return
     room.state = 'racing'
     room.raceStartAt = performance.now()
     broadcast(room, { type: 'game_started' })
+    broadcastRoomState(room)
     console.log(`[room] ${room.code} 开跑，${room.members.length} 人`)
   }, COUNTDOWN_MS)
 }
@@ -188,11 +254,27 @@ function startGame(room) {
 const server = createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, rooms: rooms.size, players: [...rooms.values()].reduce((n, r) => n + r.members.length, 0) }))
+    res.end(
+      JSON.stringify({
+        ok: true,
+        rooms: rooms.size,
+        players: [...rooms.values()].reduce((n, r) => n + r.members.length, 0),
+      }),
+    )
+    return
+  }
+  if (req.url === '/rooms') {
+    const body = JSON.stringify({ rooms: publicRooms() })
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      'access-control-allow-origin': '*',
+    })
+    res.end(body)
     return
   }
   res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
-  res.end('PY Party Run room server\n联机请连 /ws')
+  res.end('PY Party Run room server\n联机请连 /ws，房间列表见 /rooms')
 })
 
 const wss = new WebSocketServer({ server, path: '/ws' })
@@ -259,10 +341,11 @@ function handle(session, msg) {
     const code = typeof msg.code === 'string' ? msg.code.trim() : ''
     const room = rooms.get(code)
     if (!room) return fail(ws, 'ROOM_NOT_FOUND', `房间 ${code || '?'} 不存在`)
-    if (room.state !== 'lobby') return fail(ws, 'GAME_IN_PROGRESS', '这局已经开跑了')
-    if (room.members.length >= CAPACITY) return fail(ws, 'ROOM_FULL', `房间最多 ${CAPACITY} 人`)
+    // 满员优先判断：中途加入也卡 8 人上限
+    if (room.members.length >= CAPACITY) return fail(ws, 'ROOM_FULL', `房间已满（${CAPACITY} 人），等有人退出再来`)
     const nickname = cleanNickname(msg.nickname)
     if (!nickname) return fail(ws, 'BAD_MESSAGE', '昵称不能为空')
+    // 比赛中（countdown / racing）也允许加入，进来跟着一起跑（进度从起点算）
     joinCommon(session, room, nickname, cleanColor(msg.color))
     return
   }
@@ -277,6 +360,7 @@ function handle(session, msg) {
 
   if (msg.type === 'start_game') {
     if (room.hostId !== session.id) return fail(ws, 'NOT_HOST', '只有房主能开跑')
+    if (room.state === 'countdown' || room.state === 'racing') return fail(ws, 'BAD_MESSAGE', '这局已经在跑了')
     if (room.members.length < MIN_PLAYERS) {
       return fail(ws, 'NOT_ENOUGH_PLAYERS', `至少要 ${MIN_PLAYERS} 人才能开跑`)
     }
@@ -284,20 +368,36 @@ function handle(session, msg) {
     return
   }
 
+  if (msg.type === 'rematch') {
+    if (room.state !== 'results') return fail(ws, 'BAD_MESSAGE', '这一局还没结束')
+    const member = room.members.find((m) => m.id === session.id)
+    if (!member) return
+    member.rematch = true
+    broadcast(room, {
+      type: 'rematch_status',
+      votes: room.members.filter((m) => m.rematch).length,
+      total: room.members.length,
+      voterIds: room.members.filter((m) => m.rematch).map((m) => m.id),
+    })
+    console.log(
+      `[room] ${room.code} ${member.nickname} 投了再来一局（${room.members.filter((m) => m.rematch).length}/${room.members.length}）`,
+    )
+    // 全员都投了 → 自动开下一局（不再需要房主点开始）
+    if (everyoneWantsRematch(room)) {
+      console.log(`[room] ${room.code} 全员同意再来一局，自动开下一局`)
+      startGame(room)
+    }
+    return
+  }
+
   if (msg.type === 'back_to_lobby') {
-    if (room.state === 'racing' || room.state === 'countdown') {
+    if (room.state === 'countdown' || room.state === 'racing' || room.state === 'results') {
       if (room.countdownTimer) {
         clearTimeout(room.countdownTimer)
         room.countdownTimer = null
       }
       room.state = 'lobby'
-      for (const m of room.members) {
-        m.finished = false
-        m.timeMs = null
-        m.checkpoint = -1
-        m.falls = 0
-        m.kills = 0
-      }
+      resetMemberStats(room)
     }
     broadcast(room, { type: 'back_to_lobby' })
     broadcastRoomState(room)
@@ -305,7 +405,7 @@ function handle(session, msg) {
   }
 
   if (msg.type === 'player_state') {
-    if (room.state !== 'racing') return
+    if (room.state !== 'racing' && room.state !== 'results') return
     const payload = msg.payload
     if (!payload || !Array.isArray(payload.p) || payload.p.length !== 3) return
     broadcast(room, { type: 'player_state', playerId: session.id, payload }, ws)
@@ -335,7 +435,7 @@ function handle(session, msg) {
   }
 
   if (msg.type === 'died') {
-    if (room.state !== 'racing') return
+    if (room.state !== 'racing' && room.state !== 'results') return
     const victim = room.members.find((m) => m.id === session.id)
     if (!victim) return
     // killerId 必须指向本房间里的另一个人，否则按"被障碍/自己搞死"处理
@@ -357,7 +457,8 @@ function handle(session, msg) {
     return
   }
 
-  if (msg.type === 'checkpoint') {    if (room.state !== 'racing') return
+  if (msg.type === 'checkpoint') {
+    if (room.state !== 'racing') return
     const member = room.members.find((m) => m.id === session.id)
     if (!member) return
     const index = Number(msg.index)
@@ -376,6 +477,12 @@ function handle(session, msg) {
     broadcast(room, { type: 'player_finished', playerId: member.id, timeMs: member.timeMs })
     broadcast(room, { type: 'leaderboard', rows: leaderboard(room) })
     console.log(`[room] ${room.code} ${member.nickname} 完赛 ${member.timeMs} ms`)
+    // 第一个人冲线 → 全场立刻结算（没跑完的人一起看到结算面板）
+    room.state = 'results'
+    for (const m of room.members) m.rematch = false
+    broadcast(room, { type: 'race_over', rows: leaderboard(room), byPlayerId: member.id })
+    broadcastRoomState(room)
+    console.log(`[room] ${room.code} 进入结算（首位 ${member.nickname}）`)
     return
   }
 }
@@ -396,4 +503,5 @@ wss.on('close', () => clearInterval(heartbeat))
 server.listen(PORT, HOST, () => {
   console.log(`[server] 房间服务已启动 ws://${HOST}:${PORT}/ws  容量 ${MIN_PLAYERS}-${CAPACITY} 人  v${PROTOCOL_VERSION}`)
   console.log(`[server] 眩晕规则：轻击 3 次 / 重击 1 次倒地 ${KNOCKDOWN_SECONDS} s（由客户端结算）`)
+  console.log(`[server] 支持中途加入（≤${CAPACITY} 人）、全员结算、再来一局投票；房间列表 GET /rooms`)
 })

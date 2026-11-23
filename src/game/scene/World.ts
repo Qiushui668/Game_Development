@@ -1,9 +1,10 @@
 import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { COLORS, TILE, TRACK } from '@/game/core/GameConfig'
+import { COLORS, GLOVE, TILE, TRACK } from '@/game/core/GameConfig'
 import { getMaterials } from '@/game/scene/Materials'
 import {
+  GLOVES,
   HURDLE_HEIGHT,
   HURDLE_ROWS,
   HURDLE_THICKNESS,
@@ -54,6 +55,11 @@ export class GameWorld {
   private readonly spikeMeshes: THREE.Mesh[] = []
   /** 大摆锤的摆动枢轴组 */
   private readonly pendulumGroups: THREE.Group[] = []
+  /** 巨型拳击手套：整只手套（挂着的手臂 + 拳套）的组，只沿 Z 滑动 */
+  private readonly gloveGroups: THREE.Group[] = []
+  /** 手套的手臂网格（scale.x 表示伸出长度）与拳套组 */
+  private readonly gloveArms: THREE.Mesh[] = []
+  private readonly gloveFists: THREE.Group[] = []
   /** 答题墙碰撞体；解开一面就删一个 */
   private readonly quizColliders: Array<RAPIER.Collider | null> = []
   /** 赛道方格：状态机（随机消失 / 回弹）+ InstancedMesh + 每格一个 cuboid */
@@ -72,6 +78,7 @@ export class GameWorld {
       this.buildPins(),
       this.buildSpikes(),
       this.buildPendulums(),
+      this.buildGloves(),
       this.buildRamp(),
       this.buildFinishGate(),
       this.buildCrown(),
@@ -105,6 +112,24 @@ export class GameWorld {
     // 大摆锤：绕 Z 轴摆，摆角从 ObstacleField 读，判定与画面同一份
     for (let i = 0; i < this.pendulumGroups.length; i++) {
       this.pendulumGroups[i].rotation.z = this.obstacles.pendulumAngles[i]
+    }
+    // 巨型拳击手套：整组只沿 Z 滑动，手臂长度/拳套位置由探出比例决定
+    for (let i = 0; i < this.gloveGroups.length; i++) {
+      const def = GLOVES[i]
+      const state = this.obstacles.gloves[i]
+      const group = this.gloveGroups[i]
+      group.position.z = state.z
+      // 与 ObstacleField.gloveFist 同一公式：0 = 缩回墙面，1 = 探到 reach
+      const shift = state.extend * GLOVE.reach - state.wind * 0.8
+      this.gloveFists[i].position.x = shift
+      // 手臂只露在拳套后方，拳套缩回去时整条手臂一起藏进墙里
+      const armLen = shift - GLOVE.fistRadius * 0.9
+      this.gloveArms[i].visible = armLen > 0.2
+      this.gloveArms[i].scale.x = Math.max(0.01, armLen)
+      // 出拳瞬间给拳套一点"抖"：探到最外侧时轻微放大，打出去更有力
+      const pop = 1 + 0.12 * Math.min(1, state.extend)
+      this.gloveFists[i].scale.setScalar(pop)
+      group.rotation.y = def.side === 1 ? Math.PI : 0
     }
     this.updateTiles(dt)
     this.quizWalls.update(dt)
@@ -197,6 +222,9 @@ export class GameWorld {
     this.rollerGroups.length = 0
     this.spikeMeshes.length = 0
     this.pendulumGroups.length = 0
+    this.gloveGroups.length = 0
+    this.gloveArms.length = 0
+    this.gloveFists.length = 0
     this.tileColliders.length = 0
     this.tileMesh = null
     this.quizWalls.dispose()
@@ -425,6 +453,96 @@ export class GameWorld {
 
       this.pendulumGroups.push(pivot)
       group.add(pivot)
+    }
+    return group
+  }
+
+  /**
+   * 巨型拳击手套：左右墙上各一组"挂架 + 手臂 + 拳套"，整组只沿 Z 前后滑动。
+   * 每次出拳时手臂沿 X 伸进赛道、拳套跟着推出去 —— 判定读的是 ObstacleField.gloves
+   * 的同一份 extend / wind，所以"看得见的拳头"就是"打得中人的拳头"。
+   * 每组 4 个材质分区（挂架金色 / 手臂暗红 / 拳套红 / 袖口奶白）合成 4 个 mesh。
+   */
+  private buildGloves(): THREE.Group {
+    const group = new THREE.Group()
+    group.name = 'Gloves'
+    const mats = getMaterials()
+    const halfW = TRACK.width / 2
+
+    // 墙上滑轨：静态的一条，明确"只在 Z 上前后移动"
+    const railGeos: THREE.BufferGeometry[] = []
+    for (const def of GLOVES) {
+      const len = def.zRange * 2 + 3.2
+      const rail = new THREE.BoxGeometry(0.34, 0.4, len)
+      rail.translate(def.side * (halfW + 0.1), GLOVE.fistY + 0.1, def.zCenter)
+      railGeos.push(rail)
+    }
+    const railMesh = new THREE.Mesh(mergeGeometries(railGeos, false), mats.gloveMount)
+    railGeos.forEach((g) => g.dispose())
+    group.add(railMesh)
+
+    for (const def of GLOVES) {
+      const gloveGroup = new THREE.Group()
+      gloveGroup.position.set(def.side * halfW, GLOVE.fistY, def.zCenter)
+      gloveGroup.rotation.y = def.side === 1 ? Math.PI : 0
+
+      // 挂架：贴在墙上，跟着手套一起滑（比拳套宽一圈，撑住"巨型"的体积感）
+      const mountGeo = new THREE.BoxGeometry(1.0, 2.8, 2.2)
+      mountGeo.translate(-0.35, 0, 0)
+      const mountMesh = new THREE.Mesh(mountGeo, mats.gloveMount)
+      gloveGroup.add(mountMesh)
+
+      // 手臂：长度 1 的圆柱，沿 +X 从墙面向赛道内伸出；scale.x = 实际长度
+      // 半径接近袖口，"粗机械臂 + 巨型拳套"才不显得像棒棒糖
+      const armGeo = new THREE.CylinderGeometry(0.82, 0.82, 1, 12, 1)
+      armGeo.rotateZ(Math.PI / 2)
+      armGeo.translate(0.5, 0, 0)
+      const armMesh = new THREE.Mesh(armGeo, mats.gloveDark)
+      gloveGroup.add(armMesh)
+      this.gloveArms.push(armMesh)
+
+      // 拳套组：本体（球 + 指节 + 拇指）+ 袖口
+      const fist = new THREE.Group()
+      const R = GLOVE.fistRadius
+      const bodyGeos: THREE.BufferGeometry[] = []
+      const body = new THREE.SphereGeometry(R, 18, 14)
+      body.scale(1.16, 1.0, 1.05)
+      bodyGeos.push(body)
+      // 四道指节：正面（朝赛道）鼓出来的一排小球，"拳套"最认得出的特征
+      for (const kz of [-0.46, -0.15, 0.15, 0.46]) {
+        const knuckle = new THREE.SphereGeometry(R * 0.3, 10, 8)
+        knuckle.scale(0.7, 1.05, 1.0)
+        knuckle.translate(R * 0.78, R * 0.12, R * kz)
+        bodyGeos.push(knuckle)
+      }
+      // 拇指：从拳心下方鼓出来，扣在握拳的一侧
+      const thumb = new THREE.SphereGeometry(R * 0.56, 12, 10)
+      thumb.scale(0.9, 1.2, 1.0)
+      thumb.translate(R * 0.1, -R * 0.66, R * 0.7)
+      bodyGeos.push(thumb)
+      const bodyMesh = new THREE.Mesh(mergeGeometries(bodyGeos, false), mats.glove)
+      bodyGeos.forEach((g) => g.dispose())
+      fist.add(bodyMesh)
+
+      const cuffGeos: THREE.BufferGeometry[] = []
+      const cuff = new THREE.CylinderGeometry(R * 0.72, R * 0.95, R * 0.72, 16, 1)
+      cuff.rotateZ(Math.PI / 2)
+      cuff.translate(-R * 0.98, 0, 0)
+      cuffGeos.push(cuff)
+      // 袖口上的两道束带，增加"拳套"辨识度
+      for (const dz of [-0.52, 0.52]) {
+        const strap = new THREE.BoxGeometry(0.16, R * 0.42, R * 0.3)
+        strap.translate(-R * 1.02, R * 0.62, R * dz)
+        cuffGeos.push(strap)
+      }
+      const cuffMesh = new THREE.Mesh(mergeGeometries(cuffGeos, false), mats.gloveCuff)
+      cuffGeos.forEach((g) => g.dispose())
+      fist.add(cuffMesh)
+
+      gloveGroup.add(fist)
+      this.gloveFists.push(fist)
+      this.gloveGroups.push(gloveGroup)
+      group.add(gloveGroup)
     }
     return group
   }
