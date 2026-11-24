@@ -139,14 +139,29 @@ export const ERROR_CODES = {
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
 
-/** 房间服务端默认地址：与页面同主机，端口 8000 */
+/**
+ * 房间服务地址（HTTP）：默认与页面同主机 8000 端口（局域网/本地开发）。
+ * 云端部署时前端与房间服务不在同一台机器，用 `VITE_ROOM_SERVER` 覆盖，例：
+ *   VITE_ROOM_SERVER=https://ppr-room.onrender.com
+ * 留空则回退到"同主机 :8000"，局域网用法完全不变。
+ */
 export function roomServerBase(): string {
+  const override = (import.meta.env.VITE_ROOM_SERVER as string | undefined)?.trim()
+  if (override) return override.replace(/\/+$/, '')
   const host = window.location.hostname || 'localhost'
   return `${window.location.protocol === 'https:' ? 'https' : 'http'}://${host}:8000`
 }
 
-/** 房间服务端默认地址：与页面同主机，端口 8000 */
+/**
+ * WebSocket 地址：同样受 `VITE_ROOM_SERVER` 影响。
+ * https:// -> wss://、http:// -> ws://（别手工写 ws://，页面是 https 时会被浏览器当混合内容拦掉）。
+ */
 export function defaultRoomUrl(): string {
+  const override = (import.meta.env.VITE_ROOM_SERVER as string | undefined)?.trim()
+  if (override) {
+    const base = override.replace(/\/+$/, '').replace(/^http/, 'ws')
+    return `${base}/ws`
+  }
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const host = window.location.hostname || 'localhost'
   return `${proto}://${host}:8000/ws`

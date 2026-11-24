@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:vite": "vite",
     "server": "node server/index.mjs",
+    "start": "node server/index.mjs",
     "lan": "node scripts/dev.mjs",
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit",

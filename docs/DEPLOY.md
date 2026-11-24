@@ -1,0 +1,83 @@
+# 云部署说明（B2.1）
+
+这个项目是**两个东西**，部署时也要分开：
+
+| 部分 | 跑什么 | 用什么托管 |
+| --- | --- | --- |
+| 前端 | `npm run build` 出来的 `dist/`（Three.js + Vue，纯静态） | Vercel / Netlify / Cloudflare Pages（免费、无需常驻） |
+| 房间服务 | `node server/index.mjs`（WebSocket 房间、`/health`、`/rooms`） | **必须能跑常驻 Node 进程**：Render 免费 Web Service / Oracle 免费 VM / HF Spaces(Docker) |
+
+> 关键点：**房间服务必须支持长连接 WebSocket**。Vercel / Netlify 的 Serverless 撑不住长连接，只能放前端。
+
+## 推荐方案（最省事）：前端 Vercel + 房间服务 Render 免费
+
+### 1. 房间服务 → Render
+
+1. 把仓库推到 GitHub（已提交即可）。
+2. Render 控制台 → **New → Blueprint** → 选中仓库，它会读仓库根目录的 `render.yaml`：
+   - 服务名 `ppr-room`，`runtime: node`，`plan: free`，启动命令 `node server/index.mjs`，健康检查 `/health`。
+   - `region: singapore`（国内同学多就留这个；主要在北美改成 `oregon`）。
+3. 部署完成后拿到地址，形如 `https://ppr-room-xxxx.onrender.com`。先自测：
+   - `https://ppr-room-xxxx.onrender.com/health` 应返回 `{"ok":true,...}`
+   - `https://ppr-room-xxxx.onrender.com/rooms` 应返回 `{"rooms":[]}`
+4. 免费档的限制（2026 年现状）：
+   - **15 分钟没有任何流量会休眠，醒来约 1 分钟**。有人连着 WebSocket 就算流量，所以只要房里有人就不会睡；第一个进房的人可能要等约 1 分钟。
+   - 每月 750 小时，一个服务 7×24 常驻约 720 小时，刚好够一个房间服务用。
+   - 免费档不给自定义域名（要用自己的域名就升级，或改用 Oracle / Cloudflare）。
+
+### 2. 前端 → Vercel（或 Netlify / Cloudflare Pages）
+
+1. Vercel → **Add New → Project** → 选同一个仓库：Framework 会自动识别 **Vite**，构建命令 `npm run build`，输出目录 `dist`。
+2. **必须加一个环境变量**（否则前端还会去连它自己那台机器的 8000 端口）：
+
+   | Key | Value |
+   | --- | --- |
+   | `VITE_ROOM_SERVER` | `https://ppr-room-xxxx.onrender.com`（上一步拿到的地址，**写 https，别写 ws**） |
+
+   代码里会把它自动转成 `wss://…/ws`；页面是 https，写 `ws://` 会被浏览器当混合内容拦掉。
+3. 部署完打开 `https://你的项目.vercel.app`，首页 → 多人 → 建房，把房间号发给朋友即可。
+
+> 换房间服务地址时，改 `VITE_ROOM_SERVER` 后**重新部署一次**（Vite 的环境变量是构建期注入的）。
+
+### 3. 自测清单（部署完必须过一遍）
+
+```powershell
+# 房间服务活着
+curl https://ppr-room-xxxx.onrender.com/health
+# 房间列表跨域可读（服务端已带 access-control-allow-origin: *）
+curl https://ppr-room-xxxx.onrender.com/rooms
+```
+
+浏览器里：两个人分别打开前端链接 → 一个建房、一个输房间号 → 能互相看到移动 / 出拳 / 血量 / 结算。
+如果「别人不动、打不到人」，先看游戏画面顶部有没有红条——有红条就是 WebSocket 断了（换网络或等房间服务醒过来）。
+
+## 备选方案
+
+### A. Oracle Cloud Always Free（最接近"自己的服务器"，但要会开机器）
+
+- 免费额度：2 台 AMD 微型机（1/8 OCPU、1 GB），或 ARM Ampere A1 合计 1500 OCPU 小时 + 9000 GB 小时/月（约 2 核 12 GB 常驻）。
+- 一台小 VM 足够跑「前端 dist + 房间服务」：
+
+  ```bash
+  # Ubuntu 22.04，装 node 20 后
+  git clone <你的仓库> && cd Game_Development
+  npm ci --omit=dev
+  PORT=8000 node server/index.mjs     # 用 systemd / pm2 保活
+  ```
+
+- 前端可以同机用 `npx serve dist`，也可以挂 Cloudflare 免费 CDN 套一层 HTTPS（WebSocket 也走代理）。
+- 优点：不休眠、可自定义域名、带宽稳定；缺点：注册/审核麻烦，机器可能被回收，需要自己维护。
+
+### B. Cloudflare Workers + Durable Objects（长期最省钱，但要改代码）
+
+- 免费档 2026 年已支持 Durable Objects（SQLite 后端），WebSocket 也支持。
+- 但现有 `server/index.mjs` 是**单进程内存状态机**（`rooms` Map + `ws` 连接），搬进 DO 需要把「一个房间 = 一个 DO 实例」重写一遍，估计 1–2 天工作量。除非你要长期白嫖高并发，否则先用 Render。
+
+### C. Hugging Face Spaces（Docker）
+
+- 免费 2 vCPU / 16 GB，能跑本仓库自带的 `Dockerfile`，适合演示；但只有单端口、实例可能被重启，房间会清空。
+
+## 部署后的两个已知变化
+
+1. **不再是"局域网"**：拿到链接的人都能进房间（当前没有房间密码），公开链接请只发给熟人。
+2. **延迟**：房间服务在 singapore 时国内约 60–90 ms，北美西海岸约 150–200 ms。20 Hz 位置包在这个量级仍然能玩，但拳套/攻击判定会略有延迟感（判定是客户端权威）。

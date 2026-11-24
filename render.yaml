@@ -1,0 +1,19 @@
+/**
+ * Render Blueprint：一键部署「房间服务」。
+ * 用法：把仓库连到 Render → New → Blueprint → 选中本仓库 → 它会读这份 render.yaml。
+ * 只部署 Node 房间服务（WS + /health + /rooms）；前端是纯静态，放 Vercel / Netlify / Cloudflare Pages（见 docs/DEPLOY.md）。
+ */
+services:
+  - type: web
+    name: ppr-room
+    runtime: node
+    plan: free
+    # 国内同学多就选 singapore；主要在北美就选 oregon / ohio（改这里即可）
+    region: singapore
+    buildCommand: npm ci --omit=dev
+    startCommand: node server/index.mjs
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

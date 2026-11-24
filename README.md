@@ -61,6 +61,14 @@ npm run server   # ws://0.0.0.0:8000/ws
 
 同一局域网内其他人打开 `http://<你的内网IP>:5173`，在首页选多人游戏、输入房间号即可。房间 2–8 人，人数不足 2 人时房主无法开跑。
 
+### 放到公网（没有服务器也能免费跑）
+
+前端是纯静态、房间服务要常驻 Node + WebSocket，所以**分两处托管**：前端 Vercel / Netlify 免费，房间服务 Render 免费 Web Service（仓库根目录已带 `render.yaml`，一键 Blueprint 部署）。
+
+关键一步：前端必须配环境变量 `VITE_ROOM_SERVER=https://你的房间服务域名`（代码会自己转成 `wss://…/ws`，不填就还是连"当前页面主机的 :8000"，局域网用法不变）。
+
+完整步骤、免费档限制（15 分钟休眠 / 每月 750 小时）、Oracle 与 Cloudflare 备选方案见 **`docs/DEPLOY.md`**。
+
 构建与类型检查：
 
 ```powershell
