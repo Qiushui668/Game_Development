@@ -1,0 +1,16 @@
+# 构建上下文瘦身：这些不需要进入镜像
+node_modules
+dist
+.git
+.gitignore
+.venv
+__pycache__
+tools
+MP3
+cloudflared.exe
+cloudflared
+*.xlsx
+*.png
+*.log
+.env
+.env.local

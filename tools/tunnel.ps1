@@ -107,12 +107,19 @@ try { $health = Invoke-RestMethod "http://127.0.0.1:$Port/health" -TimeoutSec 10
 Write-Host ("      本地健康检查: " + ($health | ConvertTo-Json -Compress)) -ForegroundColor DarkGray
 
 # ---------- 3. 隧道 ----------
-$cf = Join-Path $env:LOCALAPPDATA 'ppr-tools\cloudflared.exe'
+# cloudflared 优先用仓库根目录下的 exe（跟着项目走，便于整体拷贝/迁移）；
+# 没有就把以前放在 %LOCALAPPDATA%\ppr-tools 的那份搬过来，再没有才下载。
+$cf = Join-Path $root 'cloudflared.exe'
 if (-not (Test-Path -LiteralPath $cf)) {
-  Write-Host '[3/3] 首次运行，下载 cloudflared …' -ForegroundColor Cyan
-  New-Item -ItemType Directory -Force -Path (Split-Path $cf) | Out-Null
-  $ProgressPreference = 'SilentlyContinue'
-  Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe' -OutFile $cf -TimeoutSec 300
+  $legacy = Join-Path $env:LOCALAPPDATA 'ppr-tools\cloudflared.exe'
+  if (Test-Path -LiteralPath $legacy) {
+    Write-Host "[3/3] 把旧位置的 cloudflared 迁到仓库根目录：$cf" -ForegroundColor Cyan
+    Move-Item -LiteralPath $legacy -Destination $cf -Force
+  } else {
+    Write-Host '[3/3] 首次运行，下载 cloudflared 到仓库根目录 …' -ForegroundColor Cyan
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe' -OutFile $cf -TimeoutSec 300
+  }
 }
 
 # 同一个端口如果还有上一次留下的隧道，先关掉（避免端口上挂两条隧道、地址混淆）

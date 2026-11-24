@@ -30,3 +30,7 @@ tools/perf_m1.json
 .env
 .env.local
 !.env.example
+
+# 隧道客户端（50MB+ 的单文件可执行，跟着项目走但不入库）
+cloudflared.exe
+cloudflared
