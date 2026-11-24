@@ -7,8 +7,11 @@
  * 不做物理模拟、不做反作弊 —— 与 docs/NETWORK_PROTOCOL.md 的权限模型一致。
  * 启动：node server/index.mjs（默认 0.0.0.0:8000，HTTP 端点 /health、/rooms，WS 端点 /ws）
  */
+import { createReadStream, existsSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
+import { extname, join, normalize } from 'node:path'
 import { performance } from 'node:perf_hooks'
+import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 
 const PORT = Number(process.env.PORT ?? 8000)
@@ -18,6 +21,34 @@ const MIN_PLAYERS = 2
 const PROTOCOL_VERSION = 5
 const COUNTDOWN_MS = 3000
 const KNOCKDOWN_SECONDS = 1
+
+/**
+ * 同源托管前端：`dist/` 存在时，除了 /health、/rooms、/ws，其余 GET 都从 dist 出。
+ * 这样"一个 node 进程 + 一条隧道（或一个容器）"就能把整站给到公网，页面与 /ws 同源，
+ * 前端不需要配 VITE_ROOM_SERVER。没构建过（dist 不存在）时行为不变，仍只做房间服务。
+ */
+const DIST_DIR = fileURLToPath(new URL('../dist/', import.meta.url))
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.glb': 'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
+  '.txt': 'text/plain; charset=utf-8',
+}
 
 /** @type {Map<string, Room>} */
 const rooms = new Map()
@@ -303,9 +334,42 @@ const server = createServer((req, res) => {
     res.end(body)
     return
   }
+  if (serveStatic(req, res)) return
   res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
   res.end('PY Party Run room server\n联机请连 /ws，房间列表见 /rooms')
 })
+
+/** 从 dist/ 返回静态文件；未构建过或路径不合法时返回 false，交给 404 文案 */
+function serveStatic(req, res) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false
+  if (!existsSync(join(DIST_DIR, 'index.html'))) return false
+
+  let pathname
+  try {
+    pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
+  } catch {
+    return false
+  }
+
+  const rel = normalize(pathname).replace(/^([/\\])+/, '')
+  let file = join(DIST_DIR, rel)
+  if (!file.startsWith(DIST_DIR)) return false
+  if (!existsSync(file) || statSync(file).isDirectory()) file = join(DIST_DIR, 'index.html')
+
+  const isAsset = pathname.startsWith('/assets/')
+  res.writeHead(200, {
+    'content-type': MIME_TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream',
+    'cache-control': isAsset ? 'public, max-age=31536000, immutable' : 'no-cache',
+  })
+  if (req.method === 'HEAD') {
+    res.end()
+    return true
+  }
+  createReadStream(file)
+    .on('error', () => res.end())
+    .pipe(res)
+  return true
+}
 
 const wss = new WebSocketServer({ server, path: '/ws' })
 

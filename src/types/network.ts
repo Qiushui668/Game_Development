@@ -140,31 +140,42 @@ export const ERROR_CODES = {
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
 
 /**
- * 房间服务地址（HTTP）：默认与页面同主机 8000 端口（局域网/本地开发）。
- * 云端部署时前端与房间服务不在同一台机器，用 `VITE_ROOM_SERVER` 覆盖，例：
- *   VITE_ROOM_SERVER=https://ppr-room.onrender.com
- * 留空则回退到"同主机 :8000"，局域网用法完全不变。
+ * 房间服务地址（HTTP）。解析顺序：
+ * 1. 地址栏 `?room=https://xxx` —— 隧道演示用：隧道地址变了只改链接，不用重新构建；
+ * 2. 构建期 `VITE_ROOM_SERVER` —— 前端与房间服务分开部署（Vercel + Render 等）；
+ * 3. 页面本身由房间服务同源托管（隧道 / 容器：端口 80/443）→ 直接用同源，`/ws` 自然可达；
+ * 4. 局域网开发（Vite 5173 / preview 4173）→ 同主机 :8000。
  */
 export function roomServerBase(): string {
+  const fromQuery = trimBase(new URLSearchParams(window.location.search).get('room') ?? '')
+  if (fromQuery) return fromQuery.replace(/^ws/, 'http')
+
   const override = (import.meta.env.VITE_ROOM_SERVER as string | undefined)?.trim()
-  if (override) return override.replace(/\/+$/, '')
+  if (override) return trimBase(override)
+
+  if (!isSeparateDevPort()) {
+    return `${window.location.protocol === 'https:' ? 'https' : 'http'}://${window.location.host}`
+  }
   const host = window.location.hostname || 'localhost'
   return `${window.location.protocol === 'https:' ? 'https' : 'http'}://${host}:8000`
 }
 
 /**
- * WebSocket 地址：同样受 `VITE_ROOM_SERVER` 影响。
+ * WebSocket 地址：同源托管时就是 `wss://<当前页面>/ws`；分开部署时由 `VITE_ROOM_SERVER` 推导。
  * https:// -> wss://、http:// -> ws://（别手工写 ws://，页面是 https 时会被浏览器当混合内容拦掉）。
  */
 export function defaultRoomUrl(): string {
-  const override = (import.meta.env.VITE_ROOM_SERVER as string | undefined)?.trim()
-  if (override) {
-    const base = override.replace(/\/+$/, '').replace(/^http/, 'ws')
-    return `${base}/ws`
-  }
-  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const host = window.location.hostname || 'localhost'
-  return `${proto}://${host}:8000/ws`
+  return `${roomServerBase().replace(/^http/, 'ws')}/ws`
+}
+
+function trimBase(value: string): string {
+  return value.trim().replace(/\/+$/, '')
+}
+
+/** Vite dev / preview 时页面与房间服务不同端口；其余（隧道、容器、同源部署）视为同源 */
+function isSeparateDevPort(): boolean {
+  const port = window.location.port
+  return port === '5173' || port === '4173'
 }
 
 /** 公开房间列表（多人页下方"已有房间"用） */

@@ -1,15 +1,53 @@
 # 云部署说明（B2.1）
 
-这个项目是**两个东西**，部署时也要分开：
+## 方案 0（不绑卡、10 分钟）：本机 + Cloudflare 临时隧道
+
+现在的 Render 免费 Blueprint 要 **$1 预授权验证身份**（不扣费，但要卡）。完全不想绑卡时走这条：
+
+```powershell
+npm run build                                  # 构建前端（已构建过可跳过）
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1
+```
+
+脚本做三件事：起「整站服务」（`dist/` 静态 + `/ws` 房间服务同一个进程）、下载 `cloudflared`（只在首次）、开一条临时隧道，最后打印：
+
+```
+  把这个网址发给朋友（手机/电脑都能开）：
+  https://xxxx-xxxx-xxxx.trycloudflare.com
+```
+
+之所以只需要一个地址：`server/index.mjs` 已经**同源托管前端**——`dist/index.html` 存在时，除 `/health`、`/rooms`、`/ws` 之外的 GET 都从 `dist/` 出（`/assets/*` 带 `immutable` 缓存，未知路径回退 `index.html`）。页面与 `/ws` 同源，前端 `defaultRoomUrl()` 直接落到 `wss://<当前域名>/ws`，**不用配 `VITE_ROOM_SERVER`、也不用部署 Vercel**。
+
+四条使用常识：
+
+1. **这台电脑要一直开着、别睡眠**，服务与隧道都跑在它上面（关掉 `node` / `cloudflared` 就断）。
+2. **隧道重启地址会变**（`*.trycloudflare.com` 每次随机）。变了就重跑 `tools\tunnel.ps1` 拿新链接——前端不用重新构建。
+3. **谁拿到链接都能进房间**（没有房间密码），只发熟人。
+4. 免费临时隧道是 Cloudflare 的"quick tunnel"，够课堂演示 / 朋友试玩；想要固定地址就绑自己的域名做 named tunnel（也要注册 Cloudflare，但不要卡）。
+
+---
+
+## 方案 1（有卡最省事）：前端 Vercel + 房间服务 Render 免费
+
+这个项目是**两个东西**，也可以分开部署：
 
 | 部分 | 跑什么 | 用什么托管 |
 | --- | --- | --- |
-| 前端 | `npm run build` 出来的 `dist/`（Three.js + Vue，纯静态） | Vercel / Netlify / Cloudflare Pages（免费、无需常驻） |
-| 房间服务 | `node server/index.mjs`（WebSocket 房间、`/health`、`/rooms`） | **必须能跑常驻 Node 进程**：Render 免费 Web Service / Oracle 免费 VM / HF Spaces(Docker) |
+| 前端 | `npm run build` 出来的 `dist/`（Three.js + Vue，纯静态） | Vercel / Netlify / Cloudflare Pages（免费、无需常驻、不要卡） |
+| 房间服务 | `node server/index.mjs`（WebSocket 房间、`/health`、`/rooms`） | **必须能跑常驻 Node 进程**：Render 免费 Web Service / Oracle 免费 VM / 任意容器 |
 
 > 关键点：**房间服务必须支持长连接 WebSocket**。Vercel / Netlify 的 Serverless 撑不住长连接，只能放前端。
 
-## 推荐方案（最省事）：前端 Vercel + 房间服务 Render 免费
+### 0. 一个容器就能整站（Oracle / 任意 Docker 平台）
+
+`Dockerfile` 已改成多阶段构建：构建阶段 `npm run build` 出 `dist/`，运行阶段只带生产依赖 + `dist` + `server`。
+
+```bash
+docker build -t ppr .
+docker run -p 8000:8000 ppr        # http://localhost:8000 整站（含 /ws）
+```
+
+页面与 `/ws` 同源，这一路同样不需要 `VITE_ROOM_SERVER`。
 
 ### 1. 房间服务 → Render
 

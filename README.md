@@ -61,13 +61,18 @@ npm run server   # ws://0.0.0.0:8000/ws
 
 同一局域网内其他人打开 `http://<你的内网IP>:5173`，在首页选多人游戏、输入房间号即可。房间 2–8 人，人数不足 2 人时房主无法开跑。
 
-### 放到公网（没有服务器也能免费跑）
+### 放到公网（没有服务器、也不想绑卡）
 
-前端是纯静态、房间服务要常驻 Node + WebSocket，所以**分两处托管**：前端 Vercel / Netlify 免费，房间服务 Render 免费 Web Service（仓库根目录已带 `render.yaml`，一键 Blueprint 部署）。
+一条命令就能把整站（前端 + 房间服务）挂到公网，电脑开着即可：
 
-关键一步：前端必须配环境变量 `VITE_ROOM_SERVER=https://你的房间服务域名`（代码会自己转成 `wss://…/ws`，不填就还是连"当前页面主机的 :8000"，局域网用法不变）。
+```powershell
+npm run build
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1
+```
 
-完整步骤、免费档限制（15 分钟休眠 / 每月 750 小时）、Oracle 与 Cloudflare 备选方案见 **`docs/DEPLOY.md`**。
+脚本会起「整站服务」（`dist/` 静态 + `/ws` 同进程同端口）、开一条 Cloudflare 临时隧道，并打印一个 `https://xxx.trycloudflare.com` 网址发给朋友。同源托管所以不用配任何环境变量；隧道重启地址会变，重跑脚本即可。
+
+要长期稳定地址、或者前端与房间服务分开托管（Vercel + Render / Oracle / 容器），完整步骤与限制见 **`docs/DEPLOY.md`**。
 
 构建与类型检查：
 
