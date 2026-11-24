@@ -132,7 +132,18 @@ function answerQuiz(index: number): void {
   game?.answerQuiz(index)
 }
 
+/**
+ * 切回前台：后台一段时间后 rAF 会被降频甚至停掉，dt 基准也过期了。
+ * 这里重设基准并把循环重新拉起来，避免"切走再切回来画面像卡死"。
+ */
+function onVisibility(): void {
+  if (document.visibilityState !== 'visible') return
+  game?.resyncLoop()
+}
+document.addEventListener('visibilitychange', onVisibility)
+
 onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibility)
   window.clearInterval(timer)
   window.clearInterval(raceTimer)
   unsubGame?.()
@@ -145,6 +156,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="canvas-host" ref="host">
     <div v-if="error" class="error">初始化失败：{{ error }}</div>
+
+    <div v-if="online && room.disconnected" class="offline">
+      与房间服务的连接已断开 —— 你自己的操作照常，但别人的位置不会再更新、也打不中他们。请刷新页面重新进入房间（局域网里通常是房间服务被重启或 Wi-Fi 断了）。
+    </div>
 
     <div v-if="online" class="room-badge">房间 {{ room.code }} · {{ room.players.length }} 人</div>
     <button class="exit" @click="emit('exit')">{{ online ? '退出房间' : '返回首页' }}</button>
@@ -199,6 +214,24 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+.offline {
+  position: absolute;
+  left: 50%;
+  top: 64px;
+  transform: translateX(-50%);
+  max-width: min(720px, 82vw);
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: rgba(168, 32, 32, 0.9);
+  border: 1px solid rgba(255, 160, 160, 0.7);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.6;
+  font-weight: 600;
+  text-align: center;
   pointer-events: none;
 }
 

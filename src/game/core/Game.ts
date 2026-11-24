@@ -449,6 +449,8 @@ export class Game {
               id,
               hp: r.health,
               ...r.position,
+              /** 距最近一包多久（ms）；> 600 说明对方的位置不再更新 */
+              staleMs: Math.round(r.staleMs(performance.now())),
             })),
           /** 自动化验收用：远端果冻人的身体颜色（验证"别人看到的我的颜色"） */
           getRemoteColors: () =>
@@ -510,9 +512,17 @@ export class Game {
           },
           /** 自动化验收用：结算面板出现后重开一局 */
           restartRace: () => this.restart(),
+          /** 自动化验收用：帧循环健康度（是否还在跑 / 捕获过几次帧内异常） */
+          getLoopHealth: () =>
+            this.loop?.health ?? { running: false, errors: 0, lastError: 'loop missing' },
         },
       })
     }
+  }
+
+  /** 切回前台（或怀疑循环停了）：重设帧时间基准并把 rAF 链重新拉起来 */
+  resyncLoop(): void {
+    this.loop?.resync()
   }
 
   start(): void {

@@ -11,6 +11,8 @@ export class RoomClient {
   private readonly handlers = new Set<Handler>()
   /** 服务器分配的玩家 id（hello 里下发） */
   selfId = ''
+  /** 是不是自己主动关的（主动关不该报"连接断开"） */
+  private closingByUs = false
 
   get connected(): boolean {
     return this.ws !== null && this.ws.readyState === WebSocket.OPEN
@@ -34,6 +36,8 @@ export class RoomClient {
         return
       }
       this.ws = socket
+      this.closingByUs = false
+      let opened = false
       const timer = window.setTimeout(() => {
         if (settled) return
         settled = true
@@ -48,6 +52,7 @@ export class RoomClient {
       socket.onopen = () => {
         if (settled) return
         settled = true
+        opened = true
         window.clearTimeout(timer)
         resolve()
       }
@@ -67,7 +72,14 @@ export class RoomClient {
           settled = true
           window.clearTimeout(timer)
           reject(new Error('房间服务拒绝连接，请确认服务端已启动且在同一个局域网'))
+          return
         }
+        // 已经连上过又掉线（服务重启 / Wi-Fi 断 / 页面被休眠）：
+        // 本地合成一个 disconnected，让 HUD 立刻提示，而不是让人"看着别人原地不动"
+        if (opened && !this.closingByUs) {
+          for (const h of this.handlers) h({ type: 'disconnected' })
+        }
+        this.closingByUs = false
       }
       socket.onerror = () => {
         /* onclose 会紧跟着来，统一在 onclose 里处理 */
@@ -82,6 +94,7 @@ export class RoomClient {
 
   close(): void {
     if (!this.ws) return
+    this.closingByUs = true
     try {
       this.ws.close()
     } catch {

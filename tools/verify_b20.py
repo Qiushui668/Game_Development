@@ -178,16 +178,20 @@ async def run(args: argparse.Namespace) -> int:
             json.dumps([round(p["x"], 2) for p in start["platforms"]]),
         )
 
-        swing = await p1.js(f"({SWING_JS})(6600)")
+        sw = float(start["swingX"])
+        travel = float(start["travel"])
+        speed = 2 * sw / travel
+        # 采样覆盖一个完整来回（2×travel），并留 1.5 s 余量
+        swing = await p1.js(f"({SWING_JS})({int(travel * 2 * 1000) + 1600})")
         xs = [[row[i]["x"] for row in swing] for i in range(len(swing[0]))]
         check(
-            "6 块都在横向左右扫（每块都到过两端 ±2 m）",
-            all(max(abs(v) for v in col) >= 1.85 for col in xs),
+            f"6 块都在横向左右扫，且都扫到两端（板心 ±{sw:.1f} m，板边贴护栏）",
+            all(min(c) <= -sw + 0.3 and max(c) >= sw - 0.3 for c in xs),
             json.dumps([[round(min(c), 2), round(max(c), 2)] for c in xs]),
         )
         check(
-            "扫的范围不越过 ±2 m 的边界",
-            all(max(abs(v) for v in col) <= 2.05 for col in xs),
+            f"扫的范围不越过 ±{sw:.1f} m 的边界（板边最多到 ±{sw + 1.8:.1f}）",
+            all(max(abs(v) for v in col) <= sw + 0.05 for col in xs),
             json.dumps([round(max(abs(v) for v in col), 2) for col in xs]),
         )
         # 三角波（匀速 + 到边界才反向）：所有转向点都发生在 |x| ≈ swingX 的边界上
@@ -196,17 +200,17 @@ async def run(args: argparse.Namespace) -> int:
             idx = [k for k in range(1, len(col) - 1) if (col[k] - col[k - 1]) * (col[k + 1] - col[k]) < 0]
             turns.append([abs(col[k]) for k in idx])
         check(
-            "每块都在边界处自动反向（转向点都在 ±2 m 附近）",
-            all(len(t) >= 1 for t in turns) and all(v >= 1.75 for t in turns for v in t),
+            f"每块都在边界处自动反向（转向点都在 ±{sw:.1f} m 附近）",
+            all(len(t) >= 2 for t in turns) and all(v >= sw - 0.45 for t in turns for v in t),
             json.dumps([[round(v, 2) for v in t] for t in turns]),
         )
         steps = [abs(col[k + 1] - col[k]) for col in xs for k in range(len(col) - 1)]
         steps_sorted = sorted(steps)
         median = steps_sorted[len(steps_sorted) // 2]
         check(
-            "边界之间匀速扫（每步位移稳定，不忽快忽慢）",
-            median > 0.04 and max(steps) < median * 2.5,
-            f"median={median:.3f} max={max(steps):.3f}",
+            f"边界之间匀速扫（速度约 {speed:.2f} m/s，每步位移稳定）",
+            median > speed * 0.06 and max(steps) < median * 2.5,
+            f"median={median:.3f} max={max(steps):.3f} speed≈{speed:.2f} m/s",
         )
         mirror = [max(abs(row[i]["x"] + row[i + 1]["x"]) for row in swing) for i in range(len(swing[0]) - 1)]
         check(
@@ -214,11 +218,12 @@ async def run(args: argparse.Namespace) -> int:
             max(mirror) <= 0.2,
             json.dumps([round(v, 2) for v in mirror]),
         )
+        # 摆幅拉满后：最坏落差 2·swingX，但中间交汇时存在可跳窗口（≤ 5.7 m 约 1.6 s）
         lat = [max(abs(row[i]["x"] - row[i + 1]["x"]) for row in swing) for i in range(len(swing[0]) - 1)]
         lat_min = [min(abs(row[i]["x"] - row[i + 1]["x"]) for row in swing) for i in range(len(swing[0]) - 1)]
         check(
-            "相邻两块横向落差 ≤ 4 m，且存在对齐窗口（一跳够得着）",
-            max(lat) <= 4.1 and max(lat_min) <= 1.2,
+            f"相邻两块落差随板同步扫到 0…{2 * sw:.1f} m，且每趟都有交汇窗口（≤ 5.7 m 跳得过去）",
+            max(lat) <= 2 * sw + 0.1 and max(lat_min) <= 2.5,
             json.dumps({"max": [round(v, 2) for v in lat], "min": [round(v, 2) for v in lat_min]}),
         )
 
@@ -239,6 +244,14 @@ async def run(args: argparse.Namespace) -> int:
             json.dumps(fall),
         )
         await p1.shot(Path(args.out) / "perf_b20_bridge.png")
+
+        # ---------- 帧循环自愈：一帧异常不能把 rAF 链扯断 ----------
+        loop1 = await p1.js("window.__PPR.getLoopHealth()")
+        check(
+            "跑了这么久帧循环还在跑、一次异常都没吞过",
+            loop1["running"] is True and loop1["errors"] == 0,
+            json.dumps(loop1, ensure_ascii=False),
+        )
 
         # ---------- 需求 1：单人结算双按钮 ----------
         await p1.js("window.__PPR.teleport(0, 0.05, -330)")
@@ -335,6 +348,14 @@ async def run(args: argparse.Namespace) -> int:
         await asyncio.sleep(2.6)
         mp = await p1.js("(() => ({ z: window.__PPR.getPlayer().z, hp: window.__PPR.getStatus().hp }))()")
         check("联机里踩空浮桥同样回起点满血", abs(mp["z"] - 3.5) < 1.2 and mp["hp"] == 100, json.dumps(mp))
+
+        # ---------- 远端位置包一直在刷新（不是冻在出生点） ----------
+        stale = await p1.js("window.__PPR.getRemotes().map(r => r.staleMs)")
+        check(
+            "远端位置包持续刷新（staleMs < 600，说明别人在动不是冻住）",
+            len(stale) == 1 and stale[0] < 600,
+            f"staleMs={stale}",
+        )
     finally:
         p1.close()
         if p2 is not None:

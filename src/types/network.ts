@@ -120,6 +120,8 @@ export type ServerEvent =
   | { type: 'player_died'; playerId: string; killerId: string | null }
   /** 只发给点了「返回房间」的那个人：他也回到大厅了，其他人不受影响 */
   | { type: 'back_to_lobby' }
+  /** 本地合成事件（不走服务器）：连接意外断开时由 RoomClient 自己发出 */
+  | { type: 'disconnected' }
   | { type: 'error'; code: string; message: string }
 
 /** 房间阶段（与服务器状态机一致） */

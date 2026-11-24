@@ -15,6 +15,11 @@ DATA = json.loads((ROOT / "layout_b20.json").read_text(encoding="utf-8"))
 BANDS = DATA["layout"]["bands"]
 HOLE = DATA["layout"].get("bridgeHole")
 TRACK = DATA["track"]
+BRIDGE = DATA.get("bridge") or {}
+SWING = float(BRIDGE.get("swingX", 7.1))
+TRAVEL = float(BRIDGE.get("travelSeconds", 4))
+BOARD_HALF = float((BRIDGE.get("size") or {}).get("width", 3.6)) / 2
+SPEED = 2 * SWING / TRAVEL
 
 COLORS = {
     "扫地杆": ("#f59e0b", "#b45309"),
@@ -176,7 +181,7 @@ def bridge_rows():
         if not b["name"].startswith("浮桥"):
             continue
         idx = int(b["name"].replace("浮桥", ""))
-        start = "起步最左（−2 m）" if idx % 2 == 1 else "起步最右（+2 m）"
+        start = f"起步最左（{SWING:.1f} m，贴护栏）" if idx % 2 == 1 else f"起步最右（+{SWING:.1f} m，贴护栏）"
         rows.append(
             '<tr><td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;font-weight:700;color:#115e59;">%s</td>'
             '<td style="padding:4px 10px;border-bottom:1px solid #f1d5e2;">x %.1f…%.1f m（扫过范围）</td>'
@@ -214,8 +219,8 @@ def build():
   <table style="border-collapse:collapse;font-size:13px;width:100%;max-width:760px;">{bridge}</table>
   <div style="font-size:13px;color:#8a5a72;line-height:1.7;margin-top:8px;">
     · 棋盘在这一段整片挖空（66 块方格没有碰撞体），踩空就掉进虚空 → 回起点满血复活；<br/>
-    · 6 块板前后间隔 5.5 m，板心共用一条 ±2 m 的左右边界：以 0.67 m/s 匀速扫过去，3 s 撞到边界立刻反向（三角波），起步时第 1/3/5 块在最左、第 2/4/6 块在最右；<br/>
-    · 因为起点左右相反，相邻两块永远镜像反向走，横向落差在 0 … 4 m 之间变（1.5 s / 4.5 s 全部对齐），档距 5.5 m + 冲刺平跳约 7.9 m，一跳够得着；<br/>
+    · 6 块板前后间隔 5.5 m，板心共用一条 ±{swing_txt} m 的左右边界（板边 ±{edge_txt}，正好贴住 ±{wall_txt} 的护栏）：以 {speed_txt} m/s 匀速扫过去，{travel_txt} s 撞到墙壁立刻反向（三角波），起步时第 1/3/5 块贴最左、第 2/4/6 块贴最右；<br/>
+    · 因为起点左右相反，相邻两块永远镜像反向走，横向落差在 0 … {range_txt} m 之间变（{align_txt} 全部对齐），只有落差 ≤ 5.7 m 的那段交汇窗口（约 1.6 s）跳得过去 —— 这一段要掐时间连跳；<br/>
     · 站上哪块就被哪块带着走（`BridgeField.carryDelta` → `PlayerController.carryX`），不会"站着不动就被板子甩下去"。
   </div>
   <div style="font-size:14px;font-weight:700;color:#7c2d55;margin:10px 0 6px;">4 只拳套与最近邻居的 z 间隙（<span style="color:#15803d;">全部 &gt; 0，无重叠</span>）</div>
@@ -233,6 +238,13 @@ def build():
         legend=legend(),
         bridge=bridge_rows(),
         rows="".join(trs),
+        swing_txt=f"{SWING:.1f}",
+        edge_txt=f"{SWING + BOARD_HALF:.1f}",
+        wall_txt=f"{float(TRACK.get('width', 18)) / 2:.0f}",
+        speed_txt=f"{SPEED:.2f}",
+        travel_txt=f"{TRAVEL:.0f}",
+        range_txt=f"{2 * SWING:.1f}",
+        align_txt=f"{TRAVEL / 2:.0f} s / {TRAVEL * 1.5:.0f} s",
     )
     return body
 

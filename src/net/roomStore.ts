@@ -41,6 +41,8 @@ export const room = reactive({
   lateJoin: false,
   /** 最近一次错误的中文原因，展示在首页/大厅 */
   error: '',
+  /** 连接中途掉线（服务重启 / Wi-Fi 断）：游戏还在本地跑，但别人的位置与命中都不再来 */
+  disconnected: false,
 })
 
 export const roomClient = new RoomClient()
@@ -78,6 +80,7 @@ function resetState(): void {
   room.rematchTotal = 0
   room.rematchVoterIds = []
   room.lateJoin = false
+  room.disconnected = false
   joined = false
 }
 
@@ -93,6 +96,7 @@ roomClient.onServer((ev) => {
   switch (ev.type) {
     case 'hello':
       room.selfId = ev.id
+      room.disconnected = false
       break
     case 'room_state': {
       // 关键：只有大厅阶段 / 自己点了"返回房间"才回首页；
@@ -155,6 +159,11 @@ roomClient.onServer((ev) => {
       room.status = 'lobby'
       room.phase = 'lobby'
       clearRound()
+      break
+    case 'disconnected':
+      // 本地合成的：连上过又掉了。游戏继续本地跑，但别人不动、打不到人 —— 明确提示出来
+      room.disconnected = true
+      room.error = '与房间服务的连接已断开（别人的位置不会更新），请刷新页面重新进入房间'
       break
     default:
       break

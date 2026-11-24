@@ -378,6 +378,8 @@ draw / tri 的变化来自"拆一个平面、换一套实例"：
 
 > 摆动口径改成「奇偶镜像起步 + 三角波匀速往返」（板心 ±2 m、单程 3 s、0.67 m/s）后重测同一机位：60 FPS / 16.67 ms / P99 16.80 ms / draw 66–68 / tri 19 842–19 938，与上表完全一致 —— 每帧仍然只是 6 次 `setNextKinematicTranslation` + 6 次 `group.position.x` 赋值，`positionOf` 是纯算术（取模 + 两个线性段），不进物理求解器。
 
+> 之后把摆幅/速度放大到「板心 ±7.1 m（板边 ±8.9 顶到护栏）、单程 4 s、3.55 m/s」：只是 `positionOf` 里 `swingX / travelSeconds` 两个常数变大，每帧还是那 6 + 6 次赋值，draw / tri / 帧时间都不变（本节取景 `tools/perf_b20_bridge.png` 仍有效，板子只是扫得更远）。
+
 ## 3. 已生效的画质降级（针对 GT 610）
 
 | 策略 | 取值 | 位置 |

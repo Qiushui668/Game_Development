@@ -85,10 +85,20 @@ export class RemotePlayer {
   }
 
   push(payload: PlayerStatePayload, nowMs: number): void {
-    this.samples.push({ at: nowMs, p: payload.p, r: payload.r, s: payload.s, a: payload.a })
+    // 包里的坐标必须是有限数字，否则一次 NaN 就会把整块 matrix 弄脏（角色消失/位置乱跳）
+    const p = payload.p
+    if (!p || p.length !== 3 || !p.every((n) => typeof n === 'number' && Number.isFinite(n))) return
+    const r = typeof payload.r === 'number' && Number.isFinite(payload.r) ? payload.r : this.yaw
+    this.samples.push({ at: nowMs, p: [p[0], p[1], p[2]], r, s: payload.s, a: payload.a })
     while (this.samples.length > MAX_SAMPLES) this.samples.shift()
     // 血量随位置包一起过来（协议 v4 的 h 字段），变化时才重画
     if (typeof payload.h === 'number') this.setHealth(payload.h)
+  }
+
+  /** 距离最近一包过去了多久（毫秒）：> 600 ms 基本就是对方掉线 / 画面被冻结 */
+  staleMs(nowMs: number): number {
+    const last = this.samples[this.samples.length - 1]
+    return last ? Math.max(0, nowMs - last.at) : Number.POSITIVE_INFINITY
   }
 
   /** 供验收读取头顶血条显示的血量 */

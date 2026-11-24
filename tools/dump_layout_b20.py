@@ -73,7 +73,7 @@ async def main() -> int:
             if not ready:
                 raise SystemExit("页面未就绪")
             await cdp.eval_js("window.__PPR.clearTiles && window.__PPR.clearTiles()")
-            data = await cdp.eval_js("JSON.stringify({layout: window.__PPR.getLayout(), " "gloves: window.__PPR.getGloves(), track: window.__PPR.getTrack()})")
+            data = await cdp.eval_js("JSON.stringify({layout: window.__PPR.getLayout(), " "gloves: window.__PPR.getGloves(), track: window.__PPR.getTrack(), bridge: window.__PPR.getBridge()})")
         payload = json.loads(data)
     finally:
         proc.terminate()

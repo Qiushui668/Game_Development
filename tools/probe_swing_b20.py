@@ -51,7 +51,8 @@ async def main() -> int:
         await page.wait("!!document.querySelector('.mode.solo')", 8)
         await click(page, ".mode.solo")
         await page.wait("!!(window.__PPR && window.__PPR.ready)", 40)
-        data = await page.js(f"({SAMPLE_JS})(7000)")
+        travel = await page.js("window.__PPR.getBridge().travelSeconds")
+        data = await page.js(f"({SAMPLE_JS})({int(float(travel) * 2000) + 1600})")
     finally:
         page.close()
     (OUT / "bridge_swing.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")

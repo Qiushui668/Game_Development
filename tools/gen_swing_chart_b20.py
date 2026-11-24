@@ -55,12 +55,12 @@ def build() -> str:
             f'<polyline points="{pts}" fill="none" stroke="{COLORS[i]}" '
             f'stroke-width="{2.6 if wide else 5.5}" opacity="{0.95 if wide else 0.18}"/>'
         )
-    # 起点标注（只标两条代表曲线，避免 6 条重合文字打架；分别贴在 ±2 m 边界外侧）
+    # 起点标注（只标两条代表曲线，避免 6 条重合文字打架；分别贴在左右边界外侧）
     parts.append(
-        f'<text x="{PAD_L + 10}" y="{py(-swing) + 20:.1f}" font-size="12.5" fill="#0f766e">块 1 / 3 / 5：起步 −2 m（最左）</text>'
+        f'<text x="{PAD_L + 10}" y="{py(-swing) + 20:.1f}" font-size="12.5" fill="#0f766e">块 1 / 3 / 5：起步 −{swing:.1f} m（板边顶住左护栏）</text>'
     )
     parts.append(
-        f'<text x="{PAD_L + 10}" y="{py(swing) - 10:.1f}" font-size="12.5" fill="#be185d">块 2 / 4 / 6：起步 +2 m（最右）</text>'
+        f'<text x="{PAD_L + 10}" y="{py(swing) - 10:.1f}" font-size="12.5" fill="#be185d">块 2 / 4 / 6：起步 +{swing:.1f} m（板边顶住右护栏）</text>'
     )
 
     # 起点标注（只标两条曲线）已在上方绘制
@@ -75,11 +75,12 @@ def build() -> str:
 
     return f"""<html style="margin:0;padding:0;background:#f8fafc;">
 <title>浮桥 6 块横向摆动实测轨迹</title>
-<div style="width:980px;height:568px;overflow:hidden;box-sizing:border-box;padding:18px 20px 22px;font-family:system-ui,'Microsoft YaHei',sans-serif;color:#0f172a;background:#f8fafc;">
-  <div style="font-size:19px;font-weight:700;letter-spacing:.5px;">浮桥 6 块板 · 实测横向轨迹（单机跑图，每 50 ms 采样 7 s）</div>
+<div style="width:980px;height:626px;overflow:hidden;box-sizing:border-box;padding:18px 20px 22px;font-family:system-ui,'Microsoft YaHei',sans-serif;color:#0f172a;background:#f8fafc;">
+  <div style="font-size:19px;font-weight:700;letter-spacing:.5px;">浮桥 6 块板 · 实测横向轨迹（单机跑图，每 50 ms 采样 {t_max:.0f} s）</div>
   <div style="font-size:13px;color:#475569;margin:6px 0 12px;max-width:900px;line-height:1.55;">
-    起点左右交替（块 1/3/5 → −2 m、块 2/4/6 → +2 m）；之后 6 块同时匀速扫，3 s 撞一次边界立刻反号，
-    相邻两块永远镜像 —— 横向落差在 0 … 4 m 之间摆动，1.5 s、4.5 s 时全部对齐居中。
+    起点左右交替（块 1/3/5 → −{swing:.1f} m、块 2/4/6 → +{swing:.1f} m）；之后 6 块同时以 {2 * swing / travel:.2f} m/s 匀速扫，
+    {travel:.0f} s 撞一次边界立刻反号（板边正好贴到 ±{swing + 1.8:.1f} 的护栏内壁），
+    相邻两块永远镜像 —— 横向落差在 0 … {2 * swing:.1f} m 之间摆动，{travel / 2:.0f} s / {travel * 1.5:.0f} s 时全部对齐居中。
   </div>
   <svg viewBox="0 0 {W} {H}" width="{W}" height="{H}" style="display:block;">
     <rect x="0" y="0" width="{W}" height="{H}" fill="#ffffff" stroke="#e2e8f0" rx="10"/>
@@ -88,8 +89,8 @@ def build() -> str:
   <div style="display:flex;flex-wrap:wrap;gap:10px 22px;font-size:12.5px;color:#475569;margin-top:10px;">
     <span><span style="display:inline-block;width:14px;height:3px;background:#22d0c8;vertical-align:middle;"></span> 块 1 / 3 / 5（起步最左）</span>
     <span><span style="display:inline-block;width:14px;height:3px;background:#ff5fa8;vertical-align:middle;"></span> 块 2 / 4 / 6（起步最右）</span>
-    <span>虚线 = ±{swing:.0f} m 运动边界（物理与画面同一份数据）</span>
-    <span>档距 5.5 m、板宽 3.6 m、冲刺平跳约 7.9 m</span>
+    <span>虚线 = ±{swing:.1f} m 运动边界（板边到 ±{swing + 1.8:.1f}，贴住护栏）</span>
+    <span>档距 5.5 m、板宽 3.6 m、冲刺平跳约 7.9 m（落差 ≤ 5.7 m 才跳得过去）</span>
   </div>
 </div>
 </html>
