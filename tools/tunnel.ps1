@@ -129,8 +129,13 @@ foreach ($o in $old) { Stop-Process -Id $o.ProcessId -Force -ErrorAction Silentl
 if ($old) { Write-Host "      已关掉 $Port 端口上一次的隧道（$($old.Count) 条）" -ForegroundColor DarkGray }
 
 # 每次运行用独立日志名，别去删正在被别的进程占用的文件
-$tunnelLog = Join-Path $logs ('_tunnel_' + $Port + '_' + (Get-Date -Format 'MMdd-HHmmss') + '.log')
-Start-Process -FilePath $cf -ArgumentList 'tunnel', '--url', "http://localhost:$Port", '--no-autoupdate', '--logfile', $tunnelLog, '--loglevel', 'info' -WindowStyle Hidden | Out-Null
+$stamp = Get-Date -Format 'MMdd-HHmmss'
+$tunnelLog = Join-Path $logs ('_tunnel_' + $Port + '_' + $stamp + '.log')
+# 把 cloudflared 自己的 stdout/stderr 也收下来：它"申请隧道"失败时只往 stderr 写，不进 --logfile
+$cfOut = Join-Path $logs ('_tunnel_' + $Port + '_' + $stamp + '.out')
+$cfErr = Join-Path $logs ('_tunnel_' + $Port + '_' + $stamp + '.err')
+$tunProc = Start-Process -FilePath $cf -ArgumentList 'tunnel', '--url', "http://localhost:$Port", '--no-autoupdate', '--logfile', $tunnelLog, '--loglevel', 'info' `
+  -WindowStyle Hidden -PassThru -RedirectStandardOutput $cfOut -RedirectStandardError $cfErr
 
 $url = ''
 for ($i = 0; $i -lt 60; $i++) {
@@ -139,11 +144,16 @@ for ($i = 0; $i -lt 60; $i++) {
     $m = Select-String -LiteralPath $tunnelLog -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' | Select-Object -First 1
     if ($m) { $url = $m.Matches[0].Value; break }
   }
+  # 进程已经退出却还没网址 = 申请失败（多半是 Cloudflare 对临时隧道的限流），别干等
+  if ($tunProc.HasExited) { break }
 }
 if (-not $url) {
   $tail = ''
   if (Test-Path -LiteralPath $tunnelLog) { $tail = (Get-Content -LiteralPath $tunnelLog -Tail 3) -join ' | ' }
-  throw "隧道没拿到地址（Cloudflare 短时间反复申请会限流，等几分钟再试）。日志：$tunnelLog  末尾：$tail"
+  $errTail = ''
+  if (Test-Path -LiteralPath $cfErr) { $errTail = (Get-Content -LiteralPath $cfErr -Tail 5) -join ' | ' }
+  $why = if ($tunProc.HasExited) { "cloudflared 已退出（exit=$($tunProc.ExitCode)），没申请到隧道" } else { 'cloudflared 还在跑但 2 分钟内没拿到地址' }
+  throw "隧道启动失败：$why。`n常见原因：Cloudflare 对无账号的临时隧道有限流（今天短时间反复创建过多条），等 5–10 分钟再试；同一时刻全局只应有一条。`n日志：$tunnelLog`ncloudflared 输出：$cfErr $errTail`n隧道日志末尾：$tail"
 }
 
 # 隧道刚建好时边缘路由还要几秒才生效，这里重试几次再下结论

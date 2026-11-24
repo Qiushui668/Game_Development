@@ -19,6 +19,13 @@
 
 **为什么网址每次重启都变**：`*.trycloudflare.com` 是 Cloudflare 的无账号临时隧道，域名由云端随机分配，进程一停就释放。变更流程是「停 → 起 → 复制新网址发出去」，前端不用重新构建（页面与 `/ws` 同源，代码里没有任何写死的域名）。脚本同时把网址写进 `tools\_tunnel_url.txt`，忘了复制可以 `-Status` 再看一次，或从 `tools\_tunnel_8000_*.log` 里 grep `trycloudflare`。
 
+**卡在"起整站服务"之后不动了？** 那是隧道这一步在等网址，脚本以前会静默等满 2 分钟。现在改成：cloudflared **进程一退出就立刻报错**，并打印它自己的 stderr、隧道日志路径和末尾几行。两种典型原因：
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| 日志停在 `Requesting new quick Tunnel...`，进程随后消失 | Cloudflare 对该出口的**临时隧道创建限流**（同一天反复建多条最容易中） | 等 5–10 分钟再启动；同时只保留一条隧道（脚本启动前会关掉同端口的旧隧道） |
+| 进程在跑但 2 分钟没网址 | 到 `region*.v2.argotunnel.com` 的 UDP/TCP 不通 | 看日志 precheck 段哪一项不是 PASS；换网络/VPN 后重试 |
+
 之所以只需要一个地址：`server/index.mjs` 已经**同源托管前端**——`dist/index.html` 存在时，除 `/health`、`/rooms`、`/ws` 之外的 GET 都从 `dist/` 出（`/assets/*` 带 `immutable` 缓存，未知路径回退 `index.html`）。页面与 `/ws` 同源，前端 `defaultRoomUrl()` 直接落到 `wss://<当前域名>/ws`，**不用配 `VITE_ROOM_SERVER`、也不用部署 Vercel**。
 
 四条使用常识：
