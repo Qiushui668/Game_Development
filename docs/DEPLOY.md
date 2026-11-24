@@ -37,6 +37,62 @@
 
 ---
 
+## 方案 0.5（推荐长期用）：固定域名 = 具名隧道（named tunnel）
+
+临时隧道的域名每次随机，是因为它在 Cloudflare 那边"无账号、无归属"。一旦你的域名**托管在 Cloudflare**（NS 指向 Cloudflare），就能建一条**具名隧道**，域名写死，每次启动都是同一个网址，而且没有 quick tunnel 那套创建配额。
+
+**前置条件**：域名必须是 Cloudflare 管理的站点（Dashboard 里状态 Active）。Cloudflare 官方口径：Tunnel 的域名必须由 Cloudflare 做权威解析（只有 Enterprise 能走非 Cloudflare NS 的 CNAME 接入）。免费域名（如 DigitalPlat 的 `*.qd.je`）只要面板允许改 NS，就能挂上去。
+
+一次性步骤：
+
+```powershell
+# 1) Cloudflare 里 Add a site → 输入域名 → Free 计划 → 拿到两个 NS，去域名面板改 NS，等 Active
+# 2) 本机登录（浏览器里选中该域名授权）
+.\cloudflared.exe tunnel login
+
+# 3) 建具名隧道（记下打印的 UUID）
+.\cloudflared.exe tunnel create qiu
+
+# 4) 让域名指到这条隧道（会在 Cloudflare 自动建 CNAME -> <UUID>.cfargotunnel.com）
+.\cloudflared.exe tunnel route dns qiu qiushui.qd.je
+
+# 5) 复制配置模板并填 UUID
+copy cloudflared\config.example.yml cloudflared\config.yml
+```
+
+`cloudflared\config.yml` 长这样（`credentials-file` 指向 `%USERPROFILE%\.cloudflared\<UUID>.json`）：
+
+```yaml
+tunnel: qiu
+credentials-file: C:\Users\<用户名>\.cloudflared\<UUID>.json
+ingress:
+  - hostname: qiushui.qd.je
+    service: http://localhost:8000
+  - service: http_status:404
+```
+
+日常三条（和临时隧道一致的使用体验，但网址固定）：
+
+| 做什么 | 命令 |
+| --- | --- |
+| 启动（起服务 + 连具名隧道 + 校验 `/health`） | `powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel_named.ps1` |
+| 状态 / 固定网址 | `powershell ... -File tools\tunnel_named.ps1 -Status` |
+| 停止 | `powershell ... -File tools\tunnel_named.ps1 -Stop` |
+
+两条隧道怎么选：
+
+| | 临时隧道 `tunnel.ps1` | 具名隧道 `tunnel_named.ps1` |
+| --- | --- | --- |
+| 网址 | 每次随机 `*.trycloudflare.com` | **固定你自己的域名** |
+| 需要账号 | 不需要 | Cloudflare 账号 + 域名托管在 Cloudflare |
+| 配额/限流 | 有（反复创建会被拒） | 无 |
+| 证书 | Cloudflare 自动 | Cloudflare 自动（站点激活后几分钟生效） |
+| 适合 | 临时给朋友看一眼 | 长期用、要发给别人收藏 |
+
+注意：`cloudflared\config.yml`、`*.json` 凭据、`*.pem` 都在 `.gitignore` 里，不会进仓库；只有模板 `config.example.yml` 会被提交。
+
+---
+
 ## 方案 1（有卡最省事）：前端 Vercel + 房间服务 Render 免费
 
 这个项目是**两个东西**，也可以分开部署：

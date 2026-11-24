@@ -1,0 +1,13 @@
+# 具名隧道配置模板：固定域名走这条
+# 用法：复制成 cloudflared/config.yml，把 <TUNNEL-UUID> 换成 `cloudflared tunnel create qiu` 打印的 UUID
+# 注意：config.yml 与 <UUID>.json 通配符都在 .gitignore 里，不会进仓库
+
+tunnel: qiu
+credentials-file: C:\Users\<你的用户名>\.cloudflared\<TUNNEL-UUID>.json
+
+ingress:
+  # 固定域名 -> 本机的整站服务（前端 dist + /ws + /health 同一个端口）
+  - hostname: qiushui.qd.je
+    service: http://localhost:8000
+  # 兜底规则，必须放在最后
+  - service: http_status:404

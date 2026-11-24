@@ -33,4 +33,9 @@ tools/perf_m1.json
 
 # 隧道客户端（50MB+ 的单文件可执行，跟着项目走但不入库）
 cloudflared.exe
-cloudflared
+
+# 具名隧道的凭据与配置（含 UUID / 证书，敏感，不入库；模板要保留）
+cloudflared/config.yml
+cloudflared/*.json
+*.pem
+!cloudflared/config.example.yml
