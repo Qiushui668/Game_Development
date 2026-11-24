@@ -19,7 +19,8 @@ param(
   [switch]$Rebuild,
   [switch]$Stop,
   [switch]$Status,
-  [switch]$WhatIf
+  [switch]$WhatIf,
+  [switch]$NoLanding
 )
 
 $ErrorActionPreference = 'Stop'
@@ -169,5 +170,18 @@ Write-Host ''
 Write-Host '  把这个网址发给朋友（手机/电脑都能开）：' -ForegroundColor Green
 Write-Host "  $url" -ForegroundColor Green
 Write-Host ''
-Write-Host '  提醒：这台电脑要一直开着、别睡眠；隧道重启后地址会变，重跑本脚本拿新链接即可。' -ForegroundColor DarkGray
 $url | Out-File -Encoding utf8 (Join-Path $logs '_tunnel_url.txt')
+
+# 固定入口（GitHub Pages 跳板页）：把 target.txt 更新成今天的隧道地址
+$landingScript = Join-Path $root 'tools\landing_deploy.ps1'
+$landingPage = Join-Path $root 'landing\index.html'
+if (-not $NoLanding -and (Test-Path -LiteralPath $landingScript) -and (Test-Path -LiteralPath $landingPage)) {
+  try {
+    & $landingScript -Url $url | Out-Host
+    Write-Host '  固定入口已更新（域名不变，页面自动跳到今天的隧道地址）' -ForegroundColor DarkGray
+  } catch {
+    Write-Host "  跳板页更新失败（不影响游戏）：$($_.Exception.Message)" -ForegroundColor Yellow
+  }
+}
+
+Write-Host '  提醒：这台电脑要一直开着、别睡眠；隧道重启后地址会变，重跑本脚本拿新链接即可。' -ForegroundColor DarkGray

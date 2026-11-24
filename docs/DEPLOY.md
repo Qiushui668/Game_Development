@@ -91,6 +91,62 @@ ingress:
 
 注意：`cloudflared\config.yml`、`*.json` 凭据、`*.pem` 都在 `.gitignore` 里，不会进仓库；只有模板 `config.example.yml` 会被提交。
 
+### 方案 0.5 在"免费子域"上为什么不成立
+
+如果域名是 DigitalPlat 这类**免费子域**（如 `qiushui.qd.je`），这条路走不通：
+
+- Cloudflare 免费及以上计划**只接受 apex 根域**加站点（报错原文：请确保您提供的是根域名，而不是任何子域名），直接 onboarding 子域要 Business/Enterprise；
+- 所以这个子域永远拿不到 Cloudflare 证书 → 建不了 named tunnel；
+- 而 `tunnel_named.ps1` 只负责本机这半边，域名那半边必须先在 Cloudflare 生效。
+
+要固定地址又不想花钱，走下面的方案 0.6。
+
+---
+
+## 方案 0.6（零成本固定入口）：GitHub Pages 跳板页
+
+思路：**域名做一个固定的"入口页"，页面自动跳到今天的隧道地址。**
+入口页放 GitHub Pages —— 它对任意 DNS 的 CNAME 子域会自动签 Let's Encrypt 证书，不要求把 NS 搬过去（这正是 Cloudflare 做不到的地方）。
+
+分工：
+
+| 角色 | 在哪 | 变不变 |
+| --- | --- | --- |
+| `https://qiushui.qd.je/` 入口页 | GitHub Pages（`gh-pages` 分支） | **固定** |
+| `target.txt`（跳转目标，一行网址） | 同上 | 每次启动被脚本改写 |
+| 真正的游戏 | 本机 node + cloudflared 临时隧道 | 每次随机 |
+
+页面行为：打开 → 拉 `target.txt` → 900ms 后 `location.replace()` 跳过去；拉不到目标就显示"入口暂时不可用（主持人可能没启动服务）"，不会白屏。
+模板在 `landing\index.html`，与 `target.txt`、`CNAME` 一起由 `tools\landing_deploy.ps1` 发布到 `gh-pages`。
+
+### 一次性设置（3 步，只做一次）
+
+1. **开启 Pages**：仓库 `Settings → Pages` → Source 选 `Deploy from a branch` → Branch 选 **`gh-pages`**、目录 **`/ (root)`** → Save。
+   （分支和 `CNAME`（内容 `qiushui.qd.je`）已由脚本推好，不用手工建。）
+2. **加 DNS**：DigitalPlat 面板给 `qiushui.qd.je` 加一条 **CNAME → `qiushui668.github.io`**（不是 `...github.io/Game_Development`）。
+3. **绑域名 + 开 HTTPS**：`Settings → Pages` → Custom domain 填 `qiushui.qd.je` → Save；DNS check 通过后勾 **Enforce HTTPS**（Let's Encrypt 自动签，几分钟到几十分钟）。
+
+### 日常
+
+```powershell
+# 启动：起服务 → 开隧道 → 自动把 target.txt 更新成今天的新地址并 push 到 gh-pages
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1
+```
+
+`tunnel.ps1` 拿到隧道地址后自动调用 `tools\landing_deploy.ps1 -Url <地址>`；只想开隧道、不动入口页时加 `-NoLanding`。
+
+```powershell
+# 只更新入口页（隧道已在别处跑着，或手工换地址）
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\landing_deploy.ps1 -Url https://xxx.trycloudflare.com
+powershell ... -DryRun    # 只本地提交，不推送
+```
+
+### 代价（提前知道，别到现场才发现）
+
+- 跳转后**地址栏会变成 `*.trycloudflare.com`**；收藏、发群里的是入口域名（它永远有效），但游戏只在主持人开机时在线。
+- Pages 发布有 30–90 秒延迟：新 `target.txt` 推送后，入口页可能还有一会儿指向旧地址。
+- 想彻底"域名即游戏"只有两条路：买个**根域名**交给 Cloudflare（方案 0.5），或租一台小服务器（方案 1 / 备选 A）。
+
 ---
 
 ## 方案 1（有卡最省事）：前端 Vercel + 房间服务 Render 免费

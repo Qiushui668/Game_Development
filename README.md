@@ -81,6 +81,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1 -Stop
 
 要长期稳定地址、或者前端与房间服务分开托管（Vercel + Render / Oracle / 容器），完整步骤与限制见 **`docs/DEPLOY.md`**。
 
+### 固定入口域名（零成本）：`https://qiushui.qd.je/`
+
+隧道地址每次变，但不是每次都要重新发链接：`landing\` 里的跳板页托管在 GitHub Pages（`gh-pages` 分支），`tools\tunnel.ps1` 每次启动成功后会把 `target.txt` 更新成当天的新地址并推送——入口域名不变，页面自己跳过去。
+
+- 页面模板：`landing\index.html`；发布脚本：`tools\landing_deploy.ps1`（`-Url` 指定目标，`-DryRun` 只提交不推送）
+- 关掉自动发布：`tools\tunnel.ps1 -NoLanding`
+- 一次性设置（开 Pages、加 CNAME、绑域名）见 `docs\DEPLOY.md` 的「方案 0.6」
+
 构建与类型检查：
 
 ```powershell
