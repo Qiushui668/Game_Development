@@ -1,6 +1,6 @@
 {
   "url": "http://localhost:5173/",
-  "collectedAt": "2026-11-23 19:03:24",
+  "collectedAt": "2026-11-24 13:28:30",
   "pass": true,
   "results": [
     {
@@ -41,12 +41,12 @@
     {
       "name": "下方列出在线房间（带人数 / 阶段）",
       "ok": true,
-      "detail": "[{\"code\": \"8073\", \"people\": \"1/8 人\", \"phase\": \"等人中\", \"full\": false}]"
+      "detail": "[{\"code\": \"7632\", \"people\": \"1/8 人\", \"phase\": \"等人中\", \"full\": false}]"
     },
     {
       "name": "点房间卡片直接进房（进大厅，房间号一致）",
       "ok": true,
-      "detail": "{\"lobby\": true, \"code\": \"8073\", \"players\": 2, \"startDisabled\": null, \"startText\": \"\"}"
+      "detail": "{\"lobby\": true, \"code\": \"7632\", \"players\": 2, \"startDisabled\": null, \"startText\": \"\"}"
     },
     {
       "name": "离开房间回到首页",
@@ -61,7 +61,7 @@
     {
       "name": "拳套沿 Z 前后滑动（3 s 内位移 > 2 m），且不越出各自滑轨",
       "ok": true,
-      "detail": "z -11.09 → -8.81 inRange=True"
+      "detail": "z -11.08 → -8.84 inRange=True"
     },
     {
       "name": "拳套随机出拳：探出比例在 0–1 之间来回",
@@ -81,17 +81,17 @@
     {
       "name": "被拳套打飞 → 记一次淘汰（deaths +1）",
       "ok": true,
-      "detail": "{\"hit\": {\"extend\": 0.7406550068586866, \"at\": 1216.300000000745, \"hp\": 0}, \"before\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 0, \"hurtFlash\": 0, \"deathFlash\": 0, \"killFlash\": 0}, \"after\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 1, \"hurtFlash\": 0, \"deathFlash\": 0.06666666666666743, \"killFlash\": 0}}"
+      "detail": "{\"hit\": {\"extend\": 0.8036431650849428, \"at\": 1385, \"hp\": 0}, \"before\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 0, \"hurtFlash\": 0, \"deathFlash\": 0, \"killFlash\": 0}, \"after\": {\"hp\": 100, \"maxHp\": 100, \"kills\": 0, \"deaths\": 1, \"hurtFlash\": 0, \"deathFlash\": 0.0333333333333341, \"killFlash\": 0}}"
     },
     {
       "name": "打飞只在拳头真伸出来时判定（extend ≥ 0.6）",
       "ok": true,
-      "detail": "{\"extend\": 0.7406550068586866, \"at\": 1216.300000000745, \"hp\": 0}"
+      "detail": "{\"extend\": 0.8036431650849428, \"at\": 1385, \"hp\": 0}"
     },
     {
       "name": "打飞时先扣光 100 血（血条归零）",
       "ok": true,
-      "detail": "{\"extend\": 0.7406550068586866, \"at\": 1216.300000000745, \"hp\": 0}"
+      "detail": "{\"extend\": 0.8036431650849428, \"at\": 1385, \"hp\": 0}"
     },
     {
       "name": "淘汰后回起点复活（z≈3.5、满血）",
@@ -126,27 +126,27 @@
     {
       "name": "建房后进大厅并显示房间号",
       "ok": true,
-      "detail": "{\"entered\": true, \"created\": true, \"lobby\": true, \"code\": \"3917\", \"players\": 1, \"startDisabled\": true, \"startText\": \"开始游戏\"}"
+      "detail": "{\"entered\": true, \"created\": true, \"lobby\": true, \"code\": \"5867\", \"players\": 1, \"startDisabled\": true, \"startText\": \"开始游戏\"}"
     },
     {
       "name": "第二个人进房后大厅显示 2 人并可开始",
       "ok": true,
-      "detail": "{\"lobby\": true, \"code\": \"3917\", \"players\": 2, \"startDisabled\": false, \"startText\": \"开始游戏\"}"
+      "detail": "{\"lobby\": true, \"code\": \"5867\", \"players\": 2, \"startDisabled\": false, \"startText\": \"开始游戏\"}"
     },
     {
       "name": "比赛中途加入：新人直接收到\"这局跑到哪了\"",
       "ok": true,
-      "detail": "{\"type\": \"game_state\", \"state\": \"racing\", \"elapsedMs\": 3743}"
+      "detail": "{\"type\": \"game_state\", \"state\": \"racing\", \"elapsedMs\": 3533}"
     },
     {
       "name": "房主画面人数跟着变（3 人）",
       "ok": true,
-      "detail": "{\"inGame\": true, \"badge\": \"房间 3917 · 3 人\", \"race\": \"Racing\", \"result\": null, \"backHome\": false}"
+      "detail": "{\"inGame\": true, \"badge\": \"房间 5867 · 3 人\", \"race\": \"Racing\", \"result\": null, \"backHome\": false}"
     },
     {
       "name": "有人退出后仍在比赛中（没被踢回首页 / 没关房）",
       "ok": true,
-      "detail": "{\"inGame\": true, \"badge\": \"房间 3917 · 2 人\", \"race\": \"Racing\", \"result\": null, \"backHome\": false}"
+      "detail": "{\"inGame\": true, \"badge\": \"房间 5867 · 2 人\", \"race\": \"Racing\", \"result\": null, \"backHome\": false}"
     },
     {
       "name": "别人冲线后自己（还在跑）也弹结算",
@@ -176,7 +176,7 @@
     {
       "name": "全员同意后自动开下一局（结算面板消失、重新倒数/起跑）",
       "ok": true,
-      "detail": "{\"inGame\": true, \"badge\": \"房间 3917 · 2 人\", \"race\": \"Countdown\", \"result\": null, \"backHome\": false}"
+      "detail": "{\"inGame\": true, \"badge\": \"房间 5867 · 2 人\", \"race\": \"Countdown\", \"result\": null, \"backHome\": false}"
     },
     {
       "name": "第二局一样：一个人冲线就全场结算",
@@ -196,7 +196,7 @@
     {
       "name": "回了大厅也不挡开局：剩下的人都同意就自动开，并把我一起带回赛道",
       "ok": true,
-      "detail": "{\"inGame\": true, \"badge\": \"房间 3917 · 2 人\", \"race\": \"Countdown\", \"result\": null, \"backHome\": false}"
+      "detail": "{\"inGame\": true, \"badge\": \"房间 5867 · 2 人\", \"race\": \"Countdown\", \"result\": null, \"backHome\": false}"
     }
   ]
 }

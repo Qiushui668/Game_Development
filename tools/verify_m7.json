@@ -1,6 +1,6 @@
 {
   "url": "http://localhost:5173/",
-  "collectedAt": "2026-11-23 19:06:20",
+  "collectedAt": "2026-11-24 13:31:25",
   "pass": true,
   "results": [
     {
@@ -21,7 +21,7 @@
     {
       "name": "创建房间得到 4 位房间号",
       "ok": true,
-      "detail": "code=6046"
+      "detail": "code=6295"
     },
     {
       "name": "只有 1 人时开始按钮禁用（最少 2 人）",
@@ -56,12 +56,12 @@
     {
       "name": "房主跑动被第二台机器看到（远端位置更新）",
       "ok": true,
-      "detail": "z 3.50 -> -6.76"
+      "detail": "z 3.50 -> -6.77"
     },
     {
       "name": "双方头顶昵称与本人大门填的一致",
       "ok": true,
-      "detail": "{\"p1\": {\"text\": \"房主甲\", \"hp\": 100, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"color\": \"#ff8a3d\", \"parent\": true}, \"p2\": {\"text\": \"玩家乙\", \"hp\": 100, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"color\": \"#ffd23f\", \"parent\": true}}"
+      "detail": "{\"p1\": {\"text\": \"房主甲\", \"hp\": 100, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"color\": \"#22d0c8\", \"parent\": true}, \"p2\": {\"text\": \"玩家乙\", \"hp\": 100, \"maxHp\": 100, \"y\": 2.45, \"visible\": true, \"color\": \"#ff8a3d\", \"parent\": true}}"
     },
     {
       "name": "HUD 有血条（HP/100）与击杀数",
@@ -76,7 +76,7 @@
     {
       "name": "房主已经面向对手（朝向跟着移动走）",
       "ok": true,
-      "detail": "yaw=3.12"
+      "detail": "yaw=3.11"
     },
     {
       "name": "开打前对面站着没被打",
@@ -156,12 +156,12 @@
     {
       "name": "结算面板列出两人成绩",
       "ok": true,
-      "detail": "[\"1房主甲1 杀12.42 s\", \"2玩家乙0 杀未完成\"]"
+      "detail": "[\"1房主甲1 杀12.18 s\", \"2玩家乙0 杀未完成\"]"
     },
     {
       "name": "冲线者成绩是服务器算的完赛时间，没跑完的标「未完成」",
       "ok": true,
-      "detail": "[\"12.42 s\", \"未完成\"]"
+      "detail": "[\"12.18 s\", \"未完成\"]"
     },
     {
       "name": "结算榜单带击杀列，且全场击杀数 > 0",
@@ -171,7 +171,7 @@
     {
       "name": "双人联机下帧率仍 >= 30",
       "ok": true,
-      "detail": "fps=59.2 p99=33.3 ms draw=91"
+      "detail": "fps=57.1 p99=33.4 ms draw=92"
     }
   ]
 }
