@@ -63,14 +63,21 @@ npm run server   # ws://0.0.0.0:8000/ws
 
 ### 放到公网（没有服务器、也不想绑卡）
 
-一条命令就能把整站（前端 + 房间服务）挂到公网，电脑开着即可：
+三条命令搞定（都在仓库根目录）：
 
 ```powershell
+# 启动：构建（首次/改过前端）→ 起整站服务 → 开隧道 → 打印网址
 npm run build
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1
+
+# 看状态与当前网址
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1 -Status
+
+# 停止（关隧道 + 关服务；网址立即失效）
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1 -Stop
 ```
 
-脚本会起「整站服务」（`dist/` 静态 + `/ws` 同进程同端口）、开一条 Cloudflare 临时隧道，并打印一个 `https://xxx.trycloudflare.com` 网址发给朋友。同源托管所以不用配任何环境变量；隧道重启地址会变，重跑脚本即可。
+脚本会起「整站服务」（`dist/` 静态 + `/ws` 同进程同端口）、开一条 Cloudflare 临时隧道，并打印一个 `https://xxx.trycloudflare.com` 网址发给朋友。同源托管所以不用配任何环境变量；`trycloudflare` 的域名每次重启都会变，重跑启动命令即可拿到新网址（前端不用重新构建）。电脑需保持开机不休眠。
 
 要长期稳定地址、或者前端与房间服务分开托管（Vercel + Render / Oracle / 容器），完整步骤与限制见 **`docs/DEPLOY.md`**。
 

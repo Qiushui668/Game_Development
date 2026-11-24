@@ -5,17 +5,21 @@
   3) 起 Cloudflare 临时隧道，把它映射成 https://<随机>.trycloudflare.com
   4) 打印可以发给朋友的那个网址
 
-用法（在仓库根目录）：
-  powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1
+常用三条（在仓库根目录）：
+  启动：powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1
+  看状态/当前网址：powershell ... -File tools\tunnel.ps1 -Status
+  停止：powershell ... -File tools\tunnel.ps1 -Stop
 可选：
   -Port 8000        本地端口（默认 8000）
-  -Rebuild          强制重新构建前端
-
-停止：关掉 cloudflared.exe 与 node（或直接结束本脚本拉起的两个进程即可）
+  -Rebuild          启动前强制重新构建前端
+  -WhatIf           配合 -Stop 使用：只列出会被关掉的进程，不真的关
 #>
 param(
   [int]$Port = 8000,
-  [switch]$Rebuild
+  [switch]$Rebuild,
+  [switch]$Stop,
+  [switch]$Status,
+  [switch]$WhatIf
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +28,59 @@ Set-Location $root
 $node = 'E:\Program Files\nodejs\node.exe'
 $npm = 'E:\Program Files\nodejs\npm.cmd'
 $logs = Join-Path $root 'tools'
+
+# ---------- -Status：只看状态，不启动/不停止 ----------
+if ($Status) {
+  $srvPid = (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
+  $tunnels = @(Get-CimInstance Win32_Process -Filter "Name = 'cloudflared.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like "*--url*localhost:$Port*" })
+
+  if ($srvPid) { Write-Host "[服务] 端口 $Port 在跑（pid $srvPid）" -ForegroundColor Green }
+  else { Write-Host "[服务] 端口 $Port 没在跑" -ForegroundColor Yellow }
+
+  if ($tunnels.Count -gt 0) {
+    Write-Host "[隧道] 在跑（pid $((($tunnels | ForEach-Object { $_.ProcessId })) -join ', ')）" -ForegroundColor Green
+    $logFile = Get-ChildItem -LiteralPath $logs -Filter "_tunnel_${Port}_*.log" -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $logFile) { $logFile = Get-ChildItem -LiteralPath $logs -Filter '_tunnel.log' -ErrorAction SilentlyContinue | Select-Object -First 1 }
+    $url = ''
+    if ($logFile) {
+      $m = Select-String -LiteralPath $logFile.FullName -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' | Select-Object -First 1
+      if ($m) { $url = $m.Matches[0].Value }
+    }
+    if ($url) {
+      Write-Host "[网址] $url" -ForegroundColor Green
+      try {
+        $h = Invoke-RestMethod "$url/health" -TimeoutSec 20
+        Write-Host ("[公网] 健康检查 " + ($h | ConvertTo-Json -Compress)) -ForegroundColor DarkGray
+      } catch { Write-Host "[公网] /health 现在不通（隧道可能刚重启或已失效）" -ForegroundColor Yellow }
+    } else {
+      Write-Host "[网址] 日志里没找到，看 $($logFile.FullName)" -ForegroundColor Yellow
+    }
+  } else {
+    Write-Host "[隧道] 没有 $Port 端口的临时隧道" -ForegroundColor Yellow
+  }
+  exit 0
+}
+
+# ---------- -Stop：先关隧道（外网立即失效），再关服务 ----------
+if ($Stop) {
+  $tunnels = @(Get-CimInstance Win32_Process -Filter "Name = 'cloudflared.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like "*--url*localhost:$Port*" })
+  $srvPid = (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
+
+  foreach ($t in $tunnels) {
+    if ($WhatIf) { Write-Host "（WhatIf）会关掉隧道 pid $($t.ProcessId)" -ForegroundColor DarkGray }
+    else { Stop-Process -Id $t.ProcessId -Force -ErrorAction SilentlyContinue; Write-Host "已关掉隧道 pid $($t.ProcessId)" }
+  }
+  if ($srvPid) {
+    if ($WhatIf) { Write-Host "（WhatIf）会关掉服务 pid $srvPid（端口 $Port）" -ForegroundColor DarkGray }
+    else { Stop-Process -Id $srvPid -Force -ErrorAction SilentlyContinue; Write-Host "已关掉服务 pid $srvPid（端口 $Port）" }
+  }
+  if ($tunnels.Count -eq 0 -and -not $srvPid) { Write-Host "本来就没在跑（端口 $Port 无服务、无隧道）" -ForegroundColor DarkGray }
+  else { Write-Host '停完后网址立即失效；下次启动会拿到一个新网址。' -ForegroundColor DarkGray }
+  exit 0
+}
 
 # ---------- 1. 前端构建 ----------
 $index = Join-Path $root 'dist\index.html'

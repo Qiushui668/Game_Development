@@ -2,28 +2,31 @@
 
 ## 方案 0（不绑卡、10 分钟）：本机 + Cloudflare 临时隧道
 
-现在的 Render 免费 Blueprint 要 **$1 预授权验证身份**（不扣费，但要卡）。完全不想绑卡时走这条：
+现在的 Render 免费 Blueprint 要 **$1 预授权验证身份**（不扣费，但要卡）。完全不想绑卡时走这条。全部操作都在仓库根目录执行：
 
-```powershell
-npm run build                                  # 构建前端（已构建过可跳过）
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1
-```
+| 做什么 | 命令 |
+| --- | --- |
+| 启动（构建→起服务→开隧道→打印网址） | `powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1` |
+| 看状态 / 当前网址 | `powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1 -Status` |
+| 停止（关隧道 + 关服务） | `powershell -NoProfile -ExecutionPolicy Bypass -File tools\tunnel.ps1 -Stop` |
 
-脚本做三件事：起「整站服务」（`dist/` 静态 + `/ws` 房间服务同一个进程）、下载 `cloudflared`（只在首次）、开一条临时隧道，最后打印：
+启动脚本做的事：起「整站服务」（`dist/` 静态 + `/ws` 房间服务同一个进程）、下载 `cloudflared`（只在首次）、开一条临时隧道，最后打印：
 
 ```
   把这个网址发给朋友（手机/电脑都能开）：
   https://xxxx-xxxx-xxxx.trycloudflare.com
 ```
 
+**为什么网址每次重启都变**：`*.trycloudflare.com` 是 Cloudflare 的无账号临时隧道，域名由云端随机分配，进程一停就释放。变更流程是「停 → 起 → 复制新网址发出去」，前端不用重新构建（页面与 `/ws` 同源，代码里没有任何写死的域名）。脚本同时把网址写进 `tools\_tunnel_url.txt`，忘了复制可以 `-Status` 再看一次，或从 `tools\_tunnel_8000_*.log` 里 grep `trycloudflare`。
+
 之所以只需要一个地址：`server/index.mjs` 已经**同源托管前端**——`dist/index.html` 存在时，除 `/health`、`/rooms`、`/ws` 之外的 GET 都从 `dist/` 出（`/assets/*` 带 `immutable` 缓存，未知路径回退 `index.html`）。页面与 `/ws` 同源，前端 `defaultRoomUrl()` 直接落到 `wss://<当前域名>/ws`，**不用配 `VITE_ROOM_SERVER`、也不用部署 Vercel**。
 
 四条使用常识：
 
-1. **这台电脑要一直开着、别睡眠**，服务与隧道都跑在它上面（关掉 `node` / `cloudflared` 就断）。
-2. **隧道重启地址会变**（`*.trycloudflare.com` 每次随机）。变了就重跑 `tools\tunnel.ps1` 拿新链接——前端不用重新构建。
+1. **这台电脑要一直开着、别睡眠**，服务与隧道都跑在它上面（关掉 `node` / `cloudflared` 就断）。只停隧道、留服务（局域网还能玩）就手动结束 `cloudflared` 进程，别用 `-Stop`。
+2. **隧道重启地址会变**（`*.trycloudflare.com` 每次随机）。变了就重跑启动命令拿新链接。
 3. **谁拿到链接都能进房间**（没有房间密码），只发熟人。
-4. 免费临时隧道是 Cloudflare 的"quick tunnel"，够课堂演示 / 朋友试玩；想要固定地址就绑自己的域名做 named tunnel（也要注册 Cloudflare，但不要卡）。
+4. 免费临时隧道是 Cloudflare 的"quick tunnel"，够课堂演示 / 朋友试玩；短时间内反复重开会触发限流（日志停在 `Requesting new quick Tunnel`），等几分钟再试。想要固定地址就绑自己的域名做 named tunnel（也要注册 Cloudflare，但不要卡）。
 
 ---
 
